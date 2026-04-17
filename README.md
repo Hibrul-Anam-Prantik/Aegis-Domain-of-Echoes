@@ -6,5 +6,6 @@ CSE423 - Computer Graphics Project (3D - Animation)
 
 ## Contributors
 
-- [@mfd-7](https://github.com/mfd-7)
-- [@lamia-tarek](https://github.com/lamia-tarek)
+- [Fuad](https://github.com/mfd-7)
+- [Roja](https://github.com/lamia-tarek)
+- [Prantik](https://github.com/hibrul-anam-prantik)
