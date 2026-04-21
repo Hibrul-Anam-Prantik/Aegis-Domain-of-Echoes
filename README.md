@@ -14,7 +14,7 @@ The core "Hook" is the Dimensional Breach (Domain Expansion). Unlike standard ga
 
 - **Ranged Kinetic Orbs:** Launch high-velocity 3D spheres (gluSphere) that use vector math to travel from the center toward the enemy's 3D coordinates.
 
-## 🌀 The Signature Feature: "The Dimensional Shift"
+## 🌀 The Signature Feature: "The Dimensional Shift / Domain Expansion"
 
 This is our "Domain Expansion." When a specific score is reached, the player triggers the Shatter Sequence:
 
