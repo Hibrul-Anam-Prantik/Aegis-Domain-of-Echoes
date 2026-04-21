@@ -74,6 +74,16 @@ If the distance between an Energy Orb and an Enemy is $\le$ the sum of their rad
 
 ---
 
+## Required Tools & Libraries
+
+- **Language:** Python 3.x
+
+- **Graphics API:** PyOpenGL
+
+- **Utilities:** OpenGL.GL, OpenGL.GLUT, OpenGL.GLU, and random for spawning logic.
+
+---
+
 ## 🚀 Installation & Running
 
 1. Install dependencies:
