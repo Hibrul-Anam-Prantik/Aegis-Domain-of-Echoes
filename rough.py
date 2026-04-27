@@ -22,22 +22,20 @@ pos_angle = 0
 person_one = False
 
 # ---------------- DOMAIN MODE ----------------
-
 domain_mode = False
 
-
+# কোডের শুরুতে এই লিস্টগুলো ডিক্লেয়ার করুন
 building_data = []
 tree_data = []
 ash_particles = []
 
-
+# --- এগুলি গ্লোবাল সেকশনে অ্যাড করুন ---
 is_swinging = False
 katana_swing_angle = 0
 orb_active = False
 orb_pos = [0, 0, 0]
 orb_dir = [0, 0]
-
-
+# ৮-ওয়ে মুভমেন্টের জন্য কি-স্টেট ট্র্যাকিং
 keys = {b'w': False, b's': False, b'a': False, b'd': False}
 
 def generate_world_data():
@@ -47,27 +45,30 @@ def generate_world_data():
     limit = GRID_LENGTH - 100 
     step = 120 
 
-
+    # লজিক: প্রতি ৩টি অবজেক্টের মধ্যে ২টা বিল্ডিং এবং ১টা গাছ থাকবে (Fixed Pattern)
+    # এতে করে চারপাশেই বিল্ডিংয়ের সংখ্যা সমান থাকবে।
     counter = 0
 
     for i in range(-limit, limit + 1, step):
- 
+        # চারপাশের বাউন্ডারি পয়েন্টগুলো: সামনে, পিছনে, ডানে, বামে
         points = [(i, limit), (i, -limit), (limit, i), (-limit, i)]
         
         for x, y in points:
-
+            # প্যাটার্ন অনুযায়ী বিল্ডিং এবং গাছ ভাগ করা
             if counter % 3 == 0 or counter % 3 == 1: 
-
+                # বিল্ডিং জেনারেট (৫৫-৬০% এর সমতুল্য)
                 h = random.randint(5, 10) 
                 building_data.append((x, y, h))
-
             else:
+                # গাছ জেনারেট
                 tree_data.append((x + random.uniform(-40, 40), y + random.uniform(-40, 40)))
             
+            # অরণ্য ঘন রাখার জন্য সবসময় ব্যাকগ্রাউন্ডে একটি অতিরিক্ত গাছ
             tree_data.append((x + random.uniform(-100, 100), y + random.uniform(-100, 100)))
             
             counter += 1
 
+    # গ্রাউন্ডের ছাই কণা
     for _ in range(8000):
         ash_particles.append((random.uniform(-GRID_LENGTH, GRID_LENGTH), 
                              random.uniform(-GRID_LENGTH, GRID_LENGTH), 
@@ -75,7 +76,6 @@ def generate_world_data():
 
 
 # ================= CAMERA =================
-
 def camera_position():
     rad = math.radians(cam_angle)
     x = cam_radius * math.cos(rad)
@@ -118,9 +118,8 @@ def setupCamera():
 
 
 # ================= WORLD =================
-
 def draw_ground():
-
+    # মেইন ফ্লোর (Solid Base)
     glColor3f(0.1, 0.1, 0.1)
     glBegin(GL_QUADS)
     glVertex3f(-GRID_LENGTH, -GRID_LENGTH, 0)
@@ -129,11 +128,14 @@ def draw_ground():
     glVertex3f(-GRID_LENGTH, GRID_LENGTH, 0)
     glEnd()
 
+    # ছাইয়ের কণাগুলো ড্র করা (পয়েন্ট হিসেবে)
     glBegin(GL_POINTS)
     for px, py, pc in ash_particles:
         glColor3f(pc, pc, pc)
-        glVertex3f(px, py, 1)
+        glVertex3f(px, py, 1) # মাটির সামান্য উপরে
     glEnd()
+
+
 
 # ================= PLAYER =================
 
@@ -143,7 +145,7 @@ def draw_orb_projectile():
     glTranslatef(orb_pos[0], orb_pos[1], orb_pos[2])
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE)
-    glColor4f(0, 1, 1, 0.8)
+    glColor4f(0, 1, 1, 0.8) # উজ্জ্বল সায়ান কালার
     glutSolidSphere(15, 20, 20)
     glDisable(GL_BLEND)
     glPopMatrix()
@@ -155,6 +157,7 @@ def draw_player():
     glTranslatef(pos_x, pos_y, 5)
     glRotatef(pos_angle, 0, 0, 1)
 
+    # ১. লোয়ার বডি ও পা
     glColor3f(0.1, 0.1, 0.1)
     for s in [-1, 1]:
         glPushMatrix()
@@ -163,7 +166,7 @@ def draw_player():
         glutSolidCube(25)
         glPopMatrix()
 
-    
+    # ২. আপার বডি
     glPushMatrix()
     glColor3f(0.2, 0.2, 0.2)
     glTranslatef(0, 0, 50)
@@ -171,6 +174,7 @@ def draw_player():
     glutSolidCube(40)
     glPopMatrix()
 
+    # ৩. শোল্ডার গার্ড
     for s in [-1, 1]:
         glPushMatrix()
         if domain_mode: glColor3f(0.4, 0, 0.6)
@@ -181,6 +185,7 @@ def draw_player():
         glutSolidCube(30)
         glPopMatrix()
 
+    # ৪. গেট কোর
     glPushMatrix()
     if domain_mode: glColor3f(0.0, 1.0, 1.0)
     else: glColor3f(0.0, 0.5, 0.8)
@@ -188,6 +193,7 @@ def draw_player():
     glutSolidSphere(8, 16, 16)
     glPopMatrix()
 
+    # ৫. মাথা ও সাইবার ভাইজর
     glPushMatrix()
     glTranslatef(0, 0, 95)
     glColor3f(0.15, 0.15, 0.15)
@@ -201,11 +207,13 @@ def draw_player():
     glPopMatrix()
     glPopMatrix()
 
+# ৬. ক্যাটানা (ডান হাতে) - একদম আপনার অরিজিনাল কোড
     glPushMatrix()
     glTranslatef(-28, -5, 55)
     
+    # শুধু এই নিচের ৩টি লাইন সুইং লজিকের জন্য যোগ করা হয়েছে, বাকি সব সেম
     if is_swinging:
-        glRotatef(-katana_swing_angle, 0, 1, 0)
+        glRotatef(-katana_swing_angle, 0, 1, 0) # সুইং স্পিড ও আর্ক কন্ট্রোল
     else:
         glRotatef(-45, 1, 0, 0) 
         
@@ -221,7 +229,8 @@ def draw_player():
     glutSolidCube(15)
     glPopMatrix()
 
-    if not orb_active:
+    # ৭. কাইনেটিক অরব (বাম হাতে) - শুধু ১টি if কন্ডিশন যোগ করা হয়েছে
+    if not orb_active: # অরব ফায়ার করলে হাত খালি দেখাবে, এছাড়া আপনার কোডই থাকবে
         glPushMatrix()
         glTranslatef(28, -8, 60) 
         
@@ -242,6 +251,7 @@ def draw_player():
         glDisable(GL_BLEND)
         glPopMatrix()
 
+    # ৮. ক্যারেক্টার অরা (Domain Mode Only)
     if domain_mode:
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE)
@@ -255,7 +265,7 @@ def draw_player():
 def draw_tree(x, y):
     glPushMatrix()
     glTranslatef(x, y, 0)
-
+    # গুড়ি
     glColor3f(0.3, 0.15, 0.05) 
     glPushMatrix()
     glTranslatef(0, 0, 40)
@@ -263,10 +273,11 @@ def draw_tree(x, y):
     glutSolidCube(40) 
     glPopMatrix()
     
+    # ৩. গাঢ় সবুজ পাতা (Deep Green)
     if domain_mode:
         glColor3f(0.5, 0.0, 0.0) 
     else:
-        glColor3f(0.0, 0.4, 0.0)
+        glColor3f(0.0, 0.4, 0.0) # Deep Green
     
     glPushMatrix()
     glTranslatef(0, 0, 80)
@@ -279,24 +290,28 @@ def draw_tree(x, y):
     glPopMatrix()
 
 def draw_broken_building(x, y, height_floors):
-
+    # বিল্ডিং এর উচ্চতা এবং শেপ আপডেট
     for i in range(height_floors):
         glPushMatrix()
         
+        # মোটা বিল্ডিং করার জন্য অফসেট সামান্য অ্যাডজাস্ট করা
         offset_x = (i * 0.8) if i % 2 == 0 else (i * -0.5)
         glTranslatef(x + offset_x, y, i * 40) 
         
+        # ১. সাদাটে হালকা রঙ
         if domain_mode:
             glColor3f(1.0, 0.9, 0.8) 
         else:
-            glColor3f(0.9, 0.9, 0.9)
+            glColor3f(0.9, 0.9, 0.9) # Light White/Grey
             
+        # ২. মোটা বিল্ডিং (৬০ সাইজ)
         glutSolidCube(60) 
 
+        # জানালার রঙ (অন্ধকার জানালা)
         glColor3f(0.1, 0.1, 0.1) 
         for k in range(-1, 2, 2):
             glPushMatrix()
-            glTranslatef(0, k * 30.1, 15)
+            glTranslatef(0, k * 30.1, 15) # ৬০ সাইজের জন্য অফসেট বাড়ানো হয়েছে
             glScalef(0.6, 0.1, 0.4)
             glutSolidCube(15)
             glPopMatrix()
@@ -309,21 +324,23 @@ def draw_broken_building(x, y, height_floors):
         glPopMatrix()
 
 def setup_fog():
-
-    glEnable(GL_FOG)
+    glEnable(GL_FOG) # কুয়াশা সক্রিয় করা
     
+    # বিকেলের আকাশের রঙ (Dusty Orange/Grey)
+    # এই রঙটি কুয়াশার জন্য ব্যবহার করলে বিকেলের আমেজ আসবে
     fog_color = [0.4, 0.3, 0.2, 1.0] 
     
-    glFogfv(GL_FOG_COLOR, fog_color) 
-    glFogi(GL_FOG_MODE, GL_EXP2)      
-    glFogf(GL_FOG_DENSITY, 0.0007)
-    glHint(GL_FOG_HINT, GL_NICEST)
+    glFogfv(GL_FOG_COLOR, fog_color)      # কুয়াশার রঙ সেট করা
+    glFogi(GL_FOG_MODE, GL_EXP2)          # কুয়াশার ধরন (Exponential 2)
+    glFogf(GL_FOG_DENSITY, 0.0007)        # আপনার রিকোয়েস্ট অনুযায়ী ঘনত্ব ০.০০০৭
+    glHint(GL_FOG_HINT, GL_NICEST)        # রেন্ডারিং কোয়ালিটি স্মুথ করা
 
 def draw_scenery():
-
+    # ১. বিল্ডিং ড্র করা
     for x, y, fl in building_data:
         draw_broken_building(x, y, fl)
         
+    # ২. গাছ ড্র করা
     for x, y in tree_data:
         draw_tree(x, y)
 
@@ -332,11 +349,10 @@ def draw_scenery():
 # ================= INPUT =================
 def keyboardListener(key, x, y):
     global keys, domain_mode, orb_active, orb_pos, orb_dir, pos_x, pos_y
-
-    if key in keys: keys[key] = True 
-
+    if key in keys: keys[key] = True # কি চেপে ধরলে True হবে
     if key == b'g' or key == b'G': domain_mode = not domain_mode
     
+    # 'f' চাপলে অরব ফায়ার হবে
     if key == b'f' or key == b'F':
         if not orb_active:
             orb_active = True
@@ -363,10 +379,8 @@ def keyboardUpListener(key, x, y):
 
 def mouseListener(button, state, x, y):
     global is_swinging, person_one
-
     if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN:
-        is_swinging = True
-
+        is_swinging = True # মাউস ক্লিকে ক্যাটানা সুইং শুরু
     if button == GLUT_RIGHT_BUTTON and state == GLUT_DOWN:
         person_one = not person_one  
 
@@ -377,14 +391,13 @@ def update_logic():
     speed = 10
     rad = math.radians(pos_angle + 90)
     
+    # ৮-ওয়ে মুভমেন্ট প্রসেসিং
     if keys[b'w']:
         pos_x -= speed * math.cos(rad)
         pos_y -= speed * math.sin(rad)
-
     if keys[b's']:
         pos_x += speed * math.cos(rad)
         pos_y += speed * math.sin(rad)
-
     if keys[b'a']: pos_angle += 4
     if keys[b'd']: pos_angle -= 4
 
@@ -393,16 +406,18 @@ def update_logic():
     pos_x = max(-world_limit, min(world_limit, pos_x))
     pos_y = max(-world_limit, min(world_limit, pos_y))
 
+    # ক্যাটানা সুইং (১৮০ ডিগ্রি ঘুরে আসবে)
     if is_swinging:
-        katana_swing_angle += 15 
+        katana_swing_angle += 15 # সুইং স্পিড
         if katana_swing_angle > 180:
             katana_swing_angle = 0
             is_swinging = False
 
+    # অরব মুভমেন্ট
     if orb_active:
-        orb_pos[0] += orb_dir[0] * 25 
+        orb_pos[0] += orb_dir[0] * 25 # ফায়ার স্পিড
         orb_pos[1] += orb_dir[1] * 25
-
+        # বাউন্ডারি পার হলে অরব শেষ
         if abs(orb_pos[0]) > GRID_LENGTH or abs(orb_pos[1]) > GRID_LENGTH:
             orb_active = False
 
@@ -441,7 +456,7 @@ def main():
 
     glEnable(GL_DEPTH_TEST)
     generate_world_data()
-    #setup_fog()
+    setup_fog()
     glClearColor(0.5, 0.8, 0.9, 1)
 
     glutDisplayFunc(showScreen)
