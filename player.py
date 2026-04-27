@@ -6,8 +6,8 @@ import random
 
 # ---------------- CAMERA ----------------
 cam_angle = 0
-cam_height = 400
-cam_radius = 700
+cam_height = 270
+cam_radius = 300
 
 fov_y = 120
 
