@@ -452,7 +452,7 @@ def main():
 
     glutKeyboardUpFunc(keyboardUpListener)
 
-    glutMainLoop()
+    glutMainLoop() 
 
 
 if __name__ == "__main__":
