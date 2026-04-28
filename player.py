@@ -364,11 +364,8 @@ def keyboardListener(key, x, y):
     if key in keys:
         keys[key] = True
 
-    # toggle domain mode
-    if key == b'x' or key == b'X':
-        domain_mode = not domain_mode
-
-    # orb projectile (fire in the player's facing/movement direction)
+    if key == b'x' or key == b'X': domain_mode = not domain_mode
+    
     if key == b'f' or key == b'F':
         if not orb_active:
             orb_active = True
