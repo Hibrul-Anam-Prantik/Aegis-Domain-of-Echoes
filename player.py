@@ -365,7 +365,7 @@ def keyboardListener(key, x, y):
         keys[key] = True
 
     # toggle domain mode
-    if key == b'g' or key == b'G':
+    if key == b'x' or key == b'X':
         domain_mode = not domain_mode
 
     # orb projectile (fire in the player's facing/movement direction)
@@ -395,9 +395,9 @@ def specialKeyListener(key, x, y):
     global camera_angle, camera_pitch
 
     # Arrow keys rotate the camera around the player or tilt it up/down.
-    if key == GLUT_KEY_LEFT:
+    if key == GLUT_KEY_RIGHT:
         camera_angle -= 3
-    elif key == GLUT_KEY_RIGHT:
+    elif key == GLUT_KEY_LEFT:
         camera_angle += 3
     elif key == GLUT_KEY_UP:
         # tilt camera upward (decrease pitch)
@@ -443,10 +443,10 @@ def update_logic():
     if keys[b's']:
         mvx -= forward_x
         mvy -= forward_y
-    if keys[b'a']:
+    if keys[b'd']:
         mvx -= right_x
         mvy -= right_y
-    if keys[b'd']:
+    if keys[b'a']:
         mvx += right_x
         mvy += right_y
 
