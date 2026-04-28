@@ -519,7 +519,7 @@ def main():
 
     glEnable(GL_DEPTH_TEST)
     generate_world_data()
-    #setup_fog()
+    setup_fog()
     glClearColor(0.5, 0.8, 0.9, 1)
 
     glutDisplayFunc(showScreen)
