@@ -5,9 +5,11 @@ import math
 import random 
 
 # ---------------- CAMERA ----------------
-cam_angle = 0
-cam_height = 270
-cam_radius = 300
+# New camera variables (azimuth, pitch, distance, vertical offset)
+camera_angle = 0        # horizontal angle around player (degrees)
+camera_pitch = 15       # tilt angle (degrees). Positive looks down onto the player
+camera_distance = 300   # distance from player
+camera_height = 90      # vertical offset added to player z for camera base height
 
 fov_y = 120
 
@@ -15,9 +17,15 @@ fov_y = 120
 GRID_LENGTH = 1000
 
 # ---------------- PLAYER ----------------
+# Core player position/rotation used by the rest of the code (keep these names)
 pos_x = 0
 pos_y = 0
 pos_angle = 0
+
+# New explicit player coordinates required by the task (kept in sync with pos_*)
+player_x = pos_x
+player_y = pos_y
+player_z = 0
 
 person_one = False
 
@@ -77,31 +85,50 @@ def generate_world_data():
 # ================= CAMERA =================
 
 def camera_position():
-    rad = math.radians(cam_angle)
-    x = cam_radius * math.cos(rad)
-    y = cam_radius * math.sin(rad)
-    z = cam_height
-    return (x, y, z)
+    """Return camera world position computed from spherical offsets around the player.
+
+    Uses camera_angle (azimuth), camera_pitch (elevation tilt) and camera_distance.
+    """
+    # convert to radians
+    az = math.radians(camera_angle)
+    pitch = math.radians(camera_pitch)
+
+    # horizontal projection of the distance
+    horiz = camera_distance * math.cos(pitch)
+
+    cx = player_x - math.cos(az) * horiz
+    cy = player_y - math.sin(az) * horiz
+    cz = player_z + camera_height + math.sin(pitch) * camera_distance
+
+    return (cx, cy, cz)
 
 
 def camera_control():
-    global person_one, pos_x, pos_y, pos_angle
+    """Return eye (camera) and look-at coordinates for gluLookAt.
+
+    If person_one (first-person toggle) is active keep the existing tiny first-person view.
+    Otherwise compute a third-person chase camera that orbits the player.
+    """
+    global person_one
 
     if person_one:
+        # keep the existing (small) first-person style camera behavior
         rad = math.radians(pos_angle + 90)
-
         xEye = pos_x - math.cos(rad) * 30
         yEye = pos_y - math.sin(rad) * 30
         zEye = 90
-
         lookx = pos_x - math.cos(rad) * 300
         looky = pos_y - math.sin(rad) * 300
         lookz = 60
-
         return (xEye, yEye, zEye, lookx, looky, lookz)
-    else:
-        x, y, z = camera_position()
-        return (x, y, z, 0, 0, 0)
+
+    # third-person chase camera
+    cx, cy, cz = camera_position()
+    # always look at the player's eye level (slightly above ground)
+    lookx = player_x
+    looky = player_y
+    lookz = player_z + 60
+    return (cx, cy, cz, lookx, looky, lookz)
 
 
 def setupCamera():
@@ -113,7 +140,7 @@ def setupCamera():
     glLoadIdentity()
 
     ex, ey, ez, lx, ly, lz = camera_control()
-
+    # use a simple up-vector (Z-up world)
     gluLookAt(ex, ey, ez, lx, ly, lz, 0, 0, 1)
 
 
@@ -333,29 +360,51 @@ def draw_scenery():
 def keyboardListener(key, x, y):
     global keys, domain_mode, orb_active, orb_pos, orb_dir, pos_x, pos_y
 
-    if key in keys: keys[key] = True 
+    # movement key state
+    if key in keys:
+        keys[key] = True
 
-    if key == b'g' or key == b'G': domain_mode = not domain_mode
-    
+    # toggle domain mode
+    if key == b'g' or key == b'G':
+        domain_mode = not domain_mode
+
+    # orb projectile (fire in the player's facing/movement direction)
     if key == b'f' or key == b'F':
         if not orb_active:
             orb_active = True
-            rad = math.radians(pos_angle + 90)
             orb_pos = [pos_x, pos_y, 60]
-            orb_dir = [-math.cos(rad), -math.sin(rad)]
+            # compute forward from current pos_angle: forward_x = cos(angle_cam), but
+            # here we want the player's facing direction based on pos_angle.
+            rad = math.radians(pos_angle)
+            forward_x = math.cos(rad + math.radians(90)) * -1  # keep behavior visually similar
+            forward_y = math.sin(rad + math.radians(90)) * -1
+            # Simpler: use player's forward derived from pos_angle/mapping
+            # Use forward vector consistent with movement facing (sin,pos -> handled in update)
+            orb_dir = [math.sin(math.radians(pos_angle)), math.cos(math.radians(pos_angle))]
+
+    # Zoom controls: + to zoom in, - to zoom out
+    global camera_distance
+    zoom_step = 20
+    if key == b'+' or key == b'=':
+        camera_distance = max(30, camera_distance - zoom_step)
+    elif key == b'-':
+        camera_distance = camera_distance + zoom_step
 
 
 def specialKeyListener(key, x, y):
-    global cam_angle, cam_height
+    global camera_angle, camera_pitch
 
-    if key == GLUT_KEY_UP:
-        cam_height += 15
-    elif key == GLUT_KEY_DOWN:
-        cam_height -= 15
-    elif key == GLUT_KEY_LEFT:
-        cam_angle -= 2
+    # Arrow keys rotate the camera around the player or tilt it up/down.
+    if key == GLUT_KEY_LEFT:
+        camera_angle -= 3
     elif key == GLUT_KEY_RIGHT:
-        cam_angle += 2
+        camera_angle += 3
+    elif key == GLUT_KEY_UP:
+        # tilt camera upward (decrease pitch)
+        camera_pitch = max(-10, camera_pitch - 3)
+    elif key == GLUT_KEY_DOWN:
+        # tilt camera downward (increase pitch)
+        camera_pitch = min(80, camera_pitch + 3)
 
 def keyboardUpListener(key, x, y):
     global keys
@@ -373,28 +422,57 @@ def mouseListener(button, state, x, y):
 
 def update_logic():
     global pos_x, pos_y, pos_angle, is_swinging, katana_swing_angle, orb_active, orb_pos
-    
+    global player_x, player_y, player_z, camera_angle
+
     speed = 10
-    rad = math.radians(pos_angle + 90)
-    
+
+    # Movement relative to camera orientation
+    az = math.radians(camera_angle)
+    forward_x = math.cos(az)
+    forward_y = math.sin(az)
+
+    right_x = -math.sin(az)
+    right_y = math.cos(az)
+
+    mvx = 0.0
+    mvy = 0.0
+
     if keys[b'w']:
-        pos_x -= speed * math.cos(rad)
-        pos_y -= speed * math.sin(rad)
-
+        mvx += forward_x
+        mvy += forward_y
     if keys[b's']:
-        pos_x += speed * math.cos(rad)
-        pos_y += speed * math.sin(rad)
+        mvx -= forward_x
+        mvy -= forward_y
+    if keys[b'a']:
+        mvx -= right_x
+        mvy -= right_y
+    if keys[b'd']:
+        mvx += right_x
+        mvy += right_y
 
-    if keys[b'a']: pos_angle += 4
-    if keys[b'd']: pos_angle -= 4
+    # normalize to avoid faster diagonal movement
+    length = math.hypot(mvx, mvy)
+    if length > 0:
+        mvx /= length
+        mvy /= length
+        pos_x += mvx * speed
+        pos_y += mvy * speed
+    # player should face movement direction automatically
+    # atan2 expects (y, x). Add 90 degrees so that pos_angle=0 corresponds
+    # to forward along -Y (preserves original coordinate convention).
+    pos_angle = math.degrees(math.atan2(mvy, mvx)) + 90
 
     world_limit = GRID_LENGTH - 200
-    
     pos_x = max(-world_limit, min(world_limit, pos_x))
     pos_y = max(-world_limit, min(world_limit, pos_y))
 
+    # keep explicit player coordinates in sync
+    player_x = pos_x
+    player_y = pos_y
+    player_z = 0
+
     if is_swinging:
-        katana_swing_angle += 15 
+        katana_swing_angle += 15
         if katana_swing_angle > 180:
             katana_swing_angle = 0
             is_swinging = False
