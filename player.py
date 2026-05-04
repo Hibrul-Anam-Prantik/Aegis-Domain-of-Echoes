@@ -335,17 +335,6 @@ def draw_broken_building(x, y, height_floors):
             glPopMatrix()
         glPopMatrix()
 
-def setup_fog():
-
-    glEnable(GL_FOG)
-    
-    fog_color = [0.4, 0.3, 0.2, 1.0] 
-    
-    glFogfv(GL_FOG_COLOR, fog_color) 
-    glFogi(GL_FOG_MODE, GL_EXP2)      
-    glFogf(GL_FOG_DENSITY, 0.0007)
-    glHint(GL_FOG_HINT, GL_NICEST)
-
 def draw_scenery():
 
     for x, y, fl in building_data:
@@ -370,14 +359,10 @@ def keyboardListener(key, x, y):
         if not orb_active:
             orb_active = True
             orb_pos = [pos_x, pos_y, 60]
-            # compute forward from current pos_angle: forward_x = cos(angle_cam), but
-            # here we want the player's facing direction based on pos_angle.
-            rad = math.radians(pos_angle)
-            forward_x = math.cos(rad + math.radians(90)) * -1  # keep behavior visually similar
-            forward_y = math.sin(rad + math.radians(90)) * -1
-            # Simpler: use player's forward derived from pos_angle/mapping
-            # Use forward vector consistent with movement facing (sin,pos -> handled in update)
-            orb_dir = [math.sin(math.radians(pos_angle)), math.cos(math.radians(pos_angle))]
+            # compute forward vector from player's facing (pos_angle)
+            # The project uses pos_angle such that forward = (sin(pos_angle), -cos(pos_angle))
+            rad_p = math.radians(pos_angle)
+            orb_dir = [math.sin(rad_p), -math.cos(rad_p)]
 
     # Zoom controls: + to zoom in, - to zoom out
     global camera_distance
@@ -454,10 +439,9 @@ def update_logic():
         mvy /= length
         pos_x += mvx * speed
         pos_y += mvy * speed
-    # player should face movement direction automatically
-    # atan2 expects (y, x). Add 90 degrees so that pos_angle=0 corresponds
-    # to forward along -Y (preserves original coordinate convention).
-    pos_angle = math.degrees(math.atan2(mvy, mvx)) + 90
+        # player should face movement direction automatically
+        # update facing only when there is movement — keeps last facing after key release
+        pos_angle = math.degrees(math.atan2(mvy, mvx)) + 90
 
     world_limit = GRID_LENGTH - 200
     pos_x = max(-world_limit, min(world_limit, pos_x))
@@ -495,7 +479,6 @@ def showScreen():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glLoadIdentity()
 
-    setup_fog()
     setupCamera()
 
     draw_ground()
@@ -516,7 +499,6 @@ def main():
 
     glEnable(GL_DEPTH_TEST)
     generate_world_data()
-    setup_fog()
     glClearColor(0.5, 0.8, 0.9, 1)
 
     glutDisplayFunc(showScreen)
