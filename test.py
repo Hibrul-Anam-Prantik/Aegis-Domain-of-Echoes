@@ -72,6 +72,7 @@ boss = {'x': 0, 'y': 0, 'z': 0, 'radius': 50}
 boss_health = 100
 boss_max_health = 100 # NEW: For the health bar
 boss_hit_this_swing = False
+boss_is_rising = False
 
 boss_orb_active = False
 boss_orb_pos = [0, 0, 0]
@@ -119,7 +120,7 @@ def spawn_enemy():
 def update_behavior():
     global enemies, pos_x, pos_y, score, max_health, player_health
     global boss_active, boss_defeated, boss, boss_orb_active, boss_orb_pos, boss_orb_dir, boss_orb_cooldown
-    global domain_mode, domain_animating, domain_roll, domain_spin_progress, domain_anim_angle, boss_is_rising
+    global boss_is_rising, domain_mode
     
     # --- BOSS SPAWN TRIGGER ---
     if score >= 500 and not boss_active and not boss_defeated:
@@ -128,8 +129,8 @@ def update_behavior():
         player_health = 10 
         boss['x'] = random.uniform(-600, 600)
         boss['y'] = random.uniform(-600, 600)
-        boss['z'] = -400  # spawn underground for cinematic rise
-        boss_is_rising = False
+        boss['z'] = -400  # start deep underground
+        boss_is_rising = True
         domain_mode = True # Auto-trigger domain expansion visuals!
         # start cinematic domain animation (spin + roll)
         domain_animating = True
@@ -159,12 +160,13 @@ def update_behavior():
 
     # --- BOSS BEHAVIOR ---
     if boss_active:
-        # If the boss is in its cinematic rise, move it up and skip attacks/collisions
+        # Rising animation: boss emerges from underground
         if boss_is_rising:
             boss['z'] += 4.0
             if boss['z'] >= 0:
                 boss['z'] = 0
                 boss_is_rising = False
+            # While rising, boss is invulnerable and does not act
         else:
             dist = distance_3d((boss['x'], boss['y'], 0), (pos_x, pos_y, 0))
             if dist > 140:
@@ -207,51 +209,44 @@ def check_collisions():
         
     # --- BOSS COLLISIONS ---
     if boss_active:
-        # If the boss is in its cinematic rise, skip damage checks and attacks
-        if boss_is_rising:
-            pass
-        else:
-            # Player orb hitting boss
-            if orb_active:
-                dist_2d = math.hypot(orb_pos[0] - boss['x'], orb_pos[1] - boss['y'])
-                if dist_2d <= (orb_radius + boss['radius']):
-                    boss_health -= 10
-                    orb_active = False
-
-            # Melee swing
-            if is_swinging and not boss_hit_this_swing:
-                if distance_3d(player_pos, (boss['x'], boss['y'], 0)) < 160:
-                    rad_p = math.radians(pos_angle)
-                    forward_x = math.sin(rad_p)
-                    forward_y = -math.cos(rad_p)
-                    dx = boss['x'] - pos_x
-                    dy = boss['y'] - pos_y
-                    dist_to_boss = math.hypot(dx, dy)
-                    if dist_to_boss > 0:
-                        dot_product = (forward_x * (dx/dist_to_boss)) + (forward_y * (dy/dist_to_boss))
-                        if dot_product > 0.5:
-                            boss_health -= 5
-                            boss_hit_this_swing = True
-
-            # Boss orb hitting player
-            if boss_orb_active and not cheat_mode:
-                dist_2d = math.hypot(boss_orb_pos[0] - pos_x, boss_orb_pos[1] - pos_y)
-                # NEW: Check I-Frames before applying damage
-                if dist_2d <= (boss_orb_radius + 20) and player_iframes <= 0:
-                    player_health -= 1
-                    player_iframes = 60 # 1 second of invulnerability
-                    boss_orb_active = False
-                    if player_health <= 0:
-                        player_health = 0
-                        game_over = True
-
-            if boss_health <= 0:
-                boss_active = False
-                boss_defeated = True
-                boss_orb_active = False
-                score += 1000
-                for _ in range(10):
-                    loot_drops.append({'type': 'coin', 'x': boss['x'] + random.uniform(-50,50), 'y': boss['y'] + random.uniform(-50,50), 'z': 10})
+        if orb_active and not boss_is_rising:
+            dist_2d = math.hypot(orb_pos[0] - boss['x'], orb_pos[1] - boss['y'])
+            if dist_2d <= (orb_radius + boss['radius']):
+                boss_health -= 10
+                orb_active = False 
+                
+        if is_swinging and not boss_hit_this_swing and not boss_is_rising:
+            if distance_3d(player_pos, (boss['x'], boss['y'], 0)) < 160: 
+                rad_p = math.radians(pos_angle)
+                forward_x = math.sin(rad_p)
+                forward_y = -math.cos(rad_p)
+                dx = boss['x'] - pos_x
+                dy = boss['y'] - pos_y
+                dist_to_boss = math.hypot(dx, dy)
+                if dist_to_boss > 0:
+                    dot_product = (forward_x * (dx/dist_to_boss)) + (forward_y * (dy/dist_to_boss))
+                    if dot_product > 0.5: 
+                        boss_health -= 5
+                        boss_hit_this_swing = True 
+        
+        if boss_orb_active and not cheat_mode:
+            dist_2d = math.hypot(boss_orb_pos[0] - pos_x, boss_orb_pos[1] - pos_y)
+            # NEW: Check I-Frames before applying damage
+            if dist_2d <= (boss_orb_radius + 20) and player_iframes <= 0:
+                player_health -= 1
+                player_iframes = 60 # 1 second of invulnerability
+                boss_orb_active = False 
+                if player_health <= 0:
+                    player_health = 0
+                    game_over = True
+                    
+        if boss_health <= 0:
+            boss_active = False
+            boss_defeated = True
+            boss_orb_active = False
+            score += 1000 
+            for _ in range(10):
+                loot_drops.append({'type': 'coin', 'x': boss['x'] + random.uniform(-50,50), 'y': boss['y'] + random.uniform(-50,50), 'z': 10})
 
     # --- REGULAR ENEMY COLLISIONS ---
     if not boss_active and not boss_defeated:
@@ -383,7 +378,7 @@ def draw_ui():
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
     glLoadIdentity()
-    # Ensure UI renders on top of 3D scene
+    # Ensure UI draws on top: disable depth test and lighting while rendering UI
     glPushAttrib(GL_ENABLE_BIT)
     glDisable(GL_DEPTH_TEST)
     try:
@@ -441,7 +436,7 @@ def draw_ui():
     if game_over:
         draw_rect(0, 0, 1000, 800, 0.2, 0.0, 0.0, 0.7) # Red Tint Overlay
         glColor3f(1.0, 0.0, 0.0) 
-        draw_text(420, 450, "WASTED!!", font=GLUT_BITMAP_TIMES_ROMAN_24)
+        draw_text(350, 450, "WASTED!!", font=GLUT_BITMAP_TIMES_ROMAN_24)
         glColor3f(1.0, 1.0, 1.0)
         draw_text(420, 400, f"FINAL SCORE: {score}")
         draw_text(300, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
@@ -449,13 +444,12 @@ def draw_ui():
     elif boss_defeated:
         draw_rect(0, 0, 1000, 800, 0.0, 0.2, 0.0, 0.7) # Green Tint Overlay
         glColor3f(0.0, 1.0, 0.0) 
-        draw_text(310, 450, "FINAL BOSS DEFEATED, GAME!!", font=GLUT_BITMAP_TIMES_ROMAN_24)
+        draw_text(250, 450, "FINAL BOSS DEFEATED!", font=GLUT_BITMAP_TIMES_ROMAN_24)
         glColor3f(1.0, 1.0, 1.0) 
         draw_text(420, 400, f"FINAL SCORE: {score}")
         draw_text(320, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
 
-    # Restore 3D Matrices
-    # Restore GL state and matrices
+    # Restore 3D Matrices and GL state
     glPopAttrib()
     glMatrixMode(GL_PROJECTION)
     glPopMatrix()
