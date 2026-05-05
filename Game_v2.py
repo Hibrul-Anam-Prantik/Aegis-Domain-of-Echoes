@@ -7,7 +7,7 @@ import sys
 import time
 import os
 
-# Provide safe fallbacks for GLUT bitmap fonts for static analysis/time-of-import safety
+# safe fallbacks for GLUT bitmap fonts for static analysis/time-of-import safety
 if 'GLUT_BITMAP_HELVETICA_18' not in globals():
     GLUT_BITMAP_HELVETICA_18 = 1
 
@@ -661,14 +661,14 @@ def draw_boss_orb():
 
 def draw_boss_shockwave():
     global boss, boss_shockwave_radius, boss_shockwave_active
-    # NEW: Render the expanding shockwave
+    # Rendering the expanding shockwave
     if boss_shockwave_active:
         glPushMatrix()
         glTranslatef(boss['x'], boss['y'], 10)
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE)
 
-        # Bright magenta wireframe outer ring
+        # Bright magenta wireframe outer ring - shockwave
         glColor4f(1.0, 0.0, 1.0, 0.8)
         try:
             glutWireTorus(15, boss_shockwave_radius, 15, 40)
@@ -1065,7 +1065,7 @@ def update_logic():
     if game_over or boss_defeated:
         return 
 
-    # NEW: Cinematic Animation Logic
+    # Cinematic Animation Logic
     if domain_animating:
         camera_angle += 3.0       # Auto-spin the camera
         domain_anim_angle += 3.0  # Track exactly how far we spun
@@ -1160,7 +1160,7 @@ def showScreen():
     draw_ground()
     draw_scenery()
     
-    # NEW: The Expanding Domain Sphere Visual
+    # The Expanding Domain Sphere Visual
     if domain_animating:
         glPushMatrix()
         glTranslatef(pos_x, pos_y, 0) # Center the sphere on the player
