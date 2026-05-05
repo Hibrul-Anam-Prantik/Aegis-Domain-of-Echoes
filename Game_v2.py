@@ -53,7 +53,7 @@ keys = {b'w': False, b's': False, b'a': False, b'd': False}
 
 # ================= ENGINEER GLOBALS =================
 enemies = []
-enemy_speed = 3.0
+enemy_speed = 2.0
 enemy_radius = 20
 orb_radius = 15
 cheat_mode = False
@@ -90,7 +90,7 @@ boss_orb_cooldown = 0
 # Boss shockwave
 boss_shockwave_active = False
 boss_shockwave_radius = 0.0
-boss_shockwave_speed = 10.0
+boss_shockwave_speed = 6.0
 boss_shockwave_cooldown = 0
 def generate_world_data():
     global building_data, tree_data, ash_particles
@@ -380,7 +380,7 @@ def auto_guardian():
         if dist > 0: pos_angle = math.degrees(math.atan2(dy, dx)) + 90
         
         if dist > 140: 
-            speed = 15 
+            speed = 10 
             pos_x += (dx / dist) * speed
             pos_y += (dy / dist) * speed
         else:
@@ -396,7 +396,7 @@ def auto_guardian():
     if dist > 0: pos_angle = math.degrees(math.atan2(dy, dx)) + 90
     
     if dist > 60:
-        speed = 12
+        speed = 7
         pos_x += (dx / dist) * speed
         pos_y += (dy / dist) * speed
     else:
@@ -1090,7 +1090,7 @@ def update_logic():
     if cheat_mode:
         auto_guardian()
     else:
-        speed = 10
+        speed = 5
         az = math.radians(camera_angle)
         forward_x = math.cos(az)
         forward_y = math.sin(az)
