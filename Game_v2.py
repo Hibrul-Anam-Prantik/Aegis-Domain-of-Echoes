@@ -904,6 +904,68 @@ def setupCamera():
     ex, ey, ez, lx, ly, lz = camera_control()
     gluLookAt(ex, ey, ez, lx, ly, lz, 0, 0, 1)
 
+def reset_game():
+    """Reset the game state to initial values (safe to call anytime).
+    This mirrors the restart behavior but is centralized so 'R' works anytime.
+    """
+    global game_over, boss_defeated, boss_active, boss_health, boss_orb_active, boss_is_rising
+    global boss_shockwave_active, boss_shockwave_radius, boss_shockwave_cooldown
+    global boss_orb_pos, boss_orb_dir, boss_orb_radius, boss_orb_speed
+    global domain_mode, domain_animating, score, max_health, player_health, pos_x, pos_y
+    global orb_active, last_orb_fire_time, enemies, loot_drops, keys
+    global pos_z, is_jumping, jump_timer, player_iframes
+
+    game_over = False
+    boss_defeated = False
+    boss_active = False
+    boss_health = boss_max_health if 'boss_max_health' in globals() else 100
+    boss_orb_active = False
+    boss_is_rising = False
+    domain_mode = False
+    domain_animating = False
+
+    # Clear boss shockwave state
+    boss_shockwave_active = False
+    boss_shockwave_radius = 0.0
+    boss_shockwave_cooldown = 0
+
+    score = 0
+    max_health = 5
+    player_health = max_health
+    pos_x = 0
+    pos_y = 0
+    orb_active = False
+    last_orb_fire_time = 0.0
+
+    # Reset boss orb values
+    try:
+        boss_orb_pos = [0, 0, 0]
+        boss_orb_dir = [0, 0, 0]
+        boss_orb_radius = 20
+        boss_orb_speed = 15
+    except Exception:
+        pass
+
+    # Reset motion/jump/counters
+    pos_z = 0
+    is_jumping = False
+    jump_timer = 0
+    player_iframes = 0
+
+    # Clear arrays safely
+    try:
+        enemies.clear()
+    except Exception:
+        enemies = []
+    try:
+        loot_drops.clear()
+    except Exception:
+        loot_drops = []
+
+    # Reset key states
+    for k in keys:
+        keys[k] = False
+
 # ================= INPUT =================
 def keyboardListener(key, x, y):
     global keys, domain_mode, orb_active, orb_pos, orb_dir, pos_x, pos_y, cheat_mode
@@ -913,28 +975,13 @@ def keyboardListener(key, x, y):
 
     if key == b'\x1b': 
         os._exit(0) 
-
+    # Restart the game at any time with 'R'
     if key == b'r' or key == b'R':
-        game_over = False
-        boss_defeated = False 
-        boss_active = False
-        boss_health = 100
-        boss_orb_active = False
-        boss_is_rising = False
-        domain_mode = False
-        domain_animating = False
-            
-        score = 0
-        max_health = 5 
-        player_health = max_health 
-        pos_x = 0
-        pos_y = 0
-        orb_active = False 
-        last_orb_fire_time = 0.0
-            
-        enemies.clear()
-        loot_drops.clear()
-        for k in keys: keys[k] = False 
+        reset_game()
+        return
+
+    if game_over or boss_defeated:
+        # When game is over or boss defeated, other inputs are ignored (except R handled above)
         return 
 
     if key in keys:
