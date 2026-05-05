@@ -7,7 +7,6 @@ import sys
 import time
 import os
 
-# Provide safe fallbacks for GLUT bitmap fonts for static analysis/time-of-import safety
 if 'GLUT_BITMAP_HELVETICA_18' not in globals():
     GLUT_BITMAP_HELVETICA_18 = 1
 
@@ -27,12 +26,19 @@ GRID_LENGTH = 1000
 # ---------------- PLAYER ----------------
 pos_x = 0
 pos_y = 0
+pos_z = 0      # NEW: Player vertical position for jumping
 pos_angle = 0
 player_x = pos_x
 player_y = pos_y
-player_z = 0
+player_z = pos_z
 person_one = False
 domain_mode = False
+
+# --- JUMP GLOBALS ---
+is_jumping = False
+jump_timer = 0
+JUMP_FRAMES = 35       # How many frames the jump lasts
+MAX_JUMP_HEIGHT = 90   # How high the player goes
 
 building_data = []
 tree_data = []
@@ -70,8 +76,13 @@ boss_max_health = 100
 boss_hit_this_swing = False
 boss_is_rising = False 
 
-domain_animating = False      # NEW: Tracks the cinematic spin state
-domain_anim_angle = 0         # NEW: Tracks the 360 rotation progress
+domain_animating = False      
+domain_anim_angle = 0         
+domain_roll = 0.0
+
+boss_is_dying = False         
+boss_death_timer = 120        
+boss_death_particles = []     
 
 boss_orb_active = False
 boss_orb_pos = [0, 0, 0]
@@ -79,6 +90,12 @@ boss_orb_dir = [0, 0, 0]
 boss_orb_radius = 20
 boss_orb_speed = 15
 boss_orb_cooldown = 0 
+
+# --- BOSS SHOCKWAVE GLOBALS ---
+boss_shockwave_active = False
+boss_shockwave_radius = 0
+boss_shockwave_speed = 14
+boss_shockwave_cooldown = 180
 
 # ================= WORLD GENERATION =================
 def generate_world_data():
@@ -118,24 +135,25 @@ def spawn_enemy():
 def update_behavior():
     global enemies, pos_x, pos_y, score, max_health, player_health, domain_mode
     global boss_active, boss_defeated, boss, boss_orb_active, boss_orb_pos, boss_orb_dir, boss_orb_cooldown
-    global boss_is_rising, domain_animating, domain_anim_angle
+    global boss_is_rising, domain_animating, domain_anim_angle, domain_roll
+    global boss_is_dying, boss_death_timer, boss_death_particles, loot_drops
+    global boss_shockwave_active, boss_shockwave_radius, boss_shockwave_cooldown
     
-    # --- BOSS SPAWN TRIGGER ---
-    # NEW: Trigger the animation state instead of instant rising
     if score >= 500 and not boss_active and not boss_defeated and not domain_animating:
         enemies.clear() 
         domain_animating = True   
         domain_anim_angle = 0     
+        domain_roll = 0.0
 
         boss_active = True
         max_health = 10
         player_health = 10 
-        boss['x'] = random.uniform(-400, 400) # Spawn a bit closer so we can see him
+        boss['x'] = random.uniform(-400, 400) 
         boss['y'] = random.uniform(-400, 400)
         boss['z'] = -400 
-        boss_is_rising = False # Wait for animation to finish before rising!
+        boss_is_rising = False 
+        boss_shockwave_cooldown = 180
 
-    # --- REGULAR ENEMY BEHAVIOR ---
     if not boss_active:
         while len(enemies) < 5:
             spawn_enemy()
@@ -154,9 +172,26 @@ def update_behavior():
                         e['x'] += ((e['x'] - other['x']) / dist_between) * (overlap * 0.1)
                         e['y'] += ((e['y'] - other['y']) / dist_between) * (overlap * 0.1)
 
-    # --- BOSS BEHAVIOR ---
-    if boss_active and not domain_animating: # Don't update boss during cinematic
-        if boss_is_rising:
+    if boss_active and not domain_animating:
+        if boss_is_dying:
+            boss_death_timer -= 1
+            for p in boss_death_particles:
+                p['x'] += p['vx']
+                p['y'] += p['vy']
+                p['z'] += p['vz']
+                p['vz'] -= 0.5 
+            
+            if boss_death_timer <= 0:
+                boss_active = False
+                boss_defeated = True
+                boss_orb_active = False
+                boss_shockwave_active = False
+                boss_is_dying = False
+                score += 1000 
+                for _ in range(10):
+                    loot_drops.append({'type': 'coin', 'x': boss['x'] + random.uniform(-50,50), 'y': boss['y'] + random.uniform(-50,50), 'z': 10})
+        
+        elif boss_is_rising:
             boss['z'] += 4.0 
             if boss['z'] >= 0:
                 boss['z'] = 0
@@ -168,10 +203,11 @@ def update_behavior():
                 boss['x'] += (pos_x - boss['x']) / dist * 1.5 
                 boss['y'] += (pos_y - boss['y']) / dist * 1.5
             
+            # --- ORB ATTACK LOGIC ---
             if boss_orb_cooldown > 0:
                 boss_orb_cooldown -= 1
 
-            if not boss_orb_active and boss_orb_cooldown <= 0:
+            if not boss_orb_active and boss_orb_cooldown <= 0 and random.randint(1, 60) == 1:
                 boss_orb_active = True
                 boss_orb_cooldown = 120 
                 boss_orb_pos = [boss['x'], boss['y'], 80] 
@@ -184,15 +220,30 @@ def update_behavior():
                 boss_orb_pos[1] += boss_orb_dir[1] * boss_orb_speed
                 if abs(boss_orb_pos[0]) > 1000 or abs(boss_orb_pos[1]) > 1000:
                     boss_orb_active = False
+                    
+            # --- SHOCKWAVE ATTACK LOGIC ---
+            if boss_shockwave_cooldown > 0:
+                boss_shockwave_cooldown -= 1
+                
+            if not boss_shockwave_active and boss_shockwave_cooldown <= 0 and random.randint(1, 60) == 1:
+                boss_shockwave_active = True
+                boss_shockwave_radius = boss['radius']
+                boss_shockwave_cooldown = 240 # 4 seconds cooldown
+                
+            if boss_shockwave_active:
+                boss_shockwave_radius += boss_shockwave_speed
+                if boss_shockwave_radius > 800: # Max range
+                    boss_shockwave_active = False
 
 def check_collisions():
-    global orb_active, orb_pos, orb_radius, enemies, is_swinging, pos_x, pos_y, cheat_mode
+    global orb_active, orb_pos, orb_radius, enemies, is_swinging, pos_x, pos_y, pos_z, cheat_mode
     global player_health, max_health, score, game_over, loot_drops, player_iframes
     global boss_active, boss_health, boss_defeated, boss, boss_orb_active, boss_orb_pos, boss_orb_radius, boss_hit_this_swing, boss_is_rising, domain_animating
+    global boss_is_dying, boss_death_particles, boss_shockwave_active, boss_shockwave_radius
     
-    if game_over or boss_defeated or domain_animating: return # Freeze collisions during animation
+    if game_over or boss_defeated or domain_animating: return 
     
-    player_pos = (pos_x, pos_y, 0)
+    player_pos = (pos_x, pos_y, pos_z)
 
     if player_iframes > 0:
         player_iframes -= 1
@@ -200,8 +251,7 @@ def check_collisions():
     if not is_swinging:
         boss_hit_this_swing = False
         
-    # --- BOSS COLLISIONS ---
-    if boss_active:
+    if boss_active and not boss_is_dying:
         if not boss_is_rising:
             if orb_active:
                 dist_2d = math.hypot(orb_pos[0] - boss['x'], orb_pos[1] - boss['y'])
@@ -210,7 +260,8 @@ def check_collisions():
                     orb_active = False 
                     
             if is_swinging and not boss_hit_this_swing:
-                if distance_3d(player_pos, (boss['x'], boss['y'], 0)) < 160: 
+                # Can only hit boss if we aren't jumping completely over it
+                if distance_3d(player_pos, (boss['x'], boss['y'], 0)) < 160 and pos_z < 100: 
                     rad_p = math.radians(pos_angle)
                     forward_x = math.sin(rad_p)
                     forward_y = -math.cos(rad_p)
@@ -223,9 +274,11 @@ def check_collisions():
                             boss_health -= 5
                             boss_hit_this_swing = True 
         
+        # Player hit by Boss Orb
         if boss_orb_active and not cheat_mode:
             dist_2d = math.hypot(boss_orb_pos[0] - pos_x, boss_orb_pos[1] - pos_y)
-            if dist_2d <= (boss_orb_radius + 20) and player_iframes <= 0:
+            # Add Z-check so jumping dodges orbs flying low
+            if dist_2d <= (boss_orb_radius + 20) and abs(pos_z - boss_orb_pos[2]) < 50 and player_iframes <= 0:
                 player_health -= 1
                 player_iframes = 60 
                 boss_orb_active = False 
@@ -233,15 +286,30 @@ def check_collisions():
                     player_health = 0
                     game_over = True
                     
-        if boss_health <= 0:
-            boss_active = False
-            boss_defeated = True
-            boss_orb_active = False
-            score += 1000 
-            for _ in range(10):
-                loot_drops.append({'type': 'coin', 'x': boss['x'] + random.uniform(-50,50), 'y': boss['y'] + random.uniform(-50,50), 'z': 10})
+        # NEW: Player hit by Shockwave
+        if boss_shockwave_active and not cheat_mode:
+            dist_2d = math.hypot(boss['x'] - pos_x, boss['y'] - pos_y)
+            # If the ring boundary hits the player (thickness of ~25 units)
+            if abs(dist_2d - boss_shockwave_radius) < 25:
+                # Player gets hit if they are on the ground (pos_z < 35)
+                if pos_z < 35 and player_iframes <= 0:
+                    player_health -= 1
+                    player_iframes = 60 
+                    if player_health <= 0:
+                        player_health = 0
+                        game_over = True
+                    
+        if boss_health <= 0 and not boss_is_dying:
+            boss_is_dying = True
+            for _ in range(200):
+                vx = random.uniform(-15, 15)
+                vy = random.uniform(-15, 15)
+                vz = random.uniform(5, 30)
+                r = random.uniform(0.6, 1.0)
+                g = random.uniform(0.0, 0.2)
+                b = random.uniform(0.5, 1.0) 
+                boss_death_particles.append({'x': boss['x'], 'y': boss['y'], 'z': boss['z'] + 50, 'vx': vx, 'vy': vy, 'vz': vz, 'r': r, 'g': g, 'b': b})
 
-    # --- REGULAR ENEMY COLLISIONS ---
     if not boss_active and not boss_defeated:
         alive_enemies = []
         hit_occurred = False
@@ -251,7 +319,8 @@ def check_collisions():
             killed = False
             damaged_player = False
             
-            if distance_3d(player_pos, e_pos) < (enemy_radius + 15):
+            # Can jump over basic enemies
+            if distance_3d(player_pos, e_pos) < (enemy_radius + 15) and pos_z < 30:
                 if not cheat_mode and player_iframes <= 0: 
                     player_health -= 1
                     player_iframes = 60 
@@ -268,7 +337,7 @@ def check_collisions():
                     score += 20
                     
             if not damaged_player and not killed and is_swinging:
-                if distance_3d(player_pos, e_pos) < 120: 
+                if distance_3d(player_pos, e_pos) < 120 and pos_z < 50: 
                     rad_p = math.radians(pos_angle)
                     forward_x = math.sin(rad_p)
                     forward_y = -math.cos(rad_p)
@@ -294,10 +363,9 @@ def check_collisions():
         enemies = alive_enemies
         if hit_occurred: orb_active = False
 
-    # --- LOOT COLLISIONS ---
     alive_loot = []
     for item in loot_drops:
-        if distance_3d(player_pos, (item['x'], item['y'], 0)) < 40:
+        if distance_3d((pos_x, pos_y, 0), (item['x'], item['y'], 0)) < 40 and pos_z < 40:
             if item['type'] == 'heart':
                 if player_health < max_health: player_health += 1 
             elif item['type'] == 'coin':
@@ -307,9 +375,9 @@ def check_collisions():
     loot_drops = alive_loot
 
 def auto_guardian():
-    global enemies, pos_angle, pos_x, pos_y, is_swinging, boss_active, boss, boss_is_rising, domain_animating
+    global enemies, pos_angle, pos_x, pos_y, is_swinging, boss_active, boss, boss_is_rising, domain_animating, boss_is_dying
     
-    if domain_animating: return # Do nothing during cutscene
+    if domain_animating or boss_is_dying: return 
 
     if boss_active:
         if boss_is_rising: return 
@@ -373,7 +441,6 @@ def draw_ui():
     glPushMatrix()
     glLoadIdentity()
     
-    # Draw UI overlay on top of the 3D scene. Disable depth test/lighting so it is always visible.
     glPushAttrib(GL_ENABLE_BIT)
     glDisable(GL_DEPTH_TEST)
     try:
@@ -381,7 +448,6 @@ def draw_ui():
     except Exception:
         pass
 
-    # Hide UI while domain is expanding for cinematic effect
     if not domain_animating:
         bar_x = 20
         bar_y = 750
@@ -439,7 +505,7 @@ def draw_ui():
         glColor3f(1.0, 1.0, 1.0) 
         draw_text(420, 400, f"FINAL SCORE: {score}")
         draw_text(320, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
-    # Restore GL state and matrices
+    
     glPopAttrib()
     glMatrixMode(GL_PROJECTION)
     glPopMatrix()
@@ -529,65 +595,93 @@ def draw_enemies():
         draw_skeleton(e['x'], e['y'], e['z'])
 
 def draw_boss():
-    global boss
-    glPushMatrix()
-    glTranslatef(boss['x'], boss['y'], boss['z'])
+    global boss, boss_is_dying
     
-    angle = math.degrees(math.atan2(pos_y - boss['y'], pos_x - boss['x']))
-    glRotatef(angle - 90, 0, 0, 1) 
-    glScalef(2.5, 2.5, 2.5) 
-    
-    glPushMatrix()
-    glTranslatef(0, 0, 60)
-    glColor3f(0.9, 0.9, 0.9) 
-    gluSphere(gluNewQuadric(), 15, 10, 10)
-    
-    glColor3f(1.0, 1.0, 0.0)
-    for dx in [-6, 6]:
+    if not boss_is_dying:
         glPushMatrix()
-        glTranslatef(dx, 12, 3)
-        gluSphere(gluNewQuadric(), 4, 10, 10)
+        glTranslatef(boss['x'], boss['y'], boss['z'])
+        
+        angle = math.degrees(math.atan2(pos_y - boss['y'], pos_x - boss['x']))
+        glRotatef(angle - 90, 0, 0, 1) 
+        glScalef(2.5, 2.5, 2.5) 
+        
+        glPushMatrix()
+        glTranslatef(0, 0, 60)
+        glColor3f(0.9, 0.9, 0.9) 
+        gluSphere(gluNewQuadric(), 15, 10, 10)
+        
+        glColor3f(1.0, 1.0, 0.0)
+        for dx in [-6, 6]:
+            glPushMatrix()
+            glTranslatef(dx, 12, 3)
+            gluSphere(gluNewQuadric(), 4, 10, 10)
+            glPopMatrix()
+            
+        glColor3f(1.0, 0.5, 0.0) 
+        glPushMatrix()
+        glTranslatef(0, 0, 12) 
+        glRotatef(15, 1, 0, 0) 
+        glPushMatrix()
+        glScalef(1.5, 1.5, 0.1)
+        glutSolidCube(25) 
+        glPopMatrix()
+        glTranslatef(0, 0, 2)
+        gluCylinder(gluNewQuadric(), 12, 8, 15, 10, 10)
+        glPopMatrix()
+        glPopMatrix() 
+        
+        glPushMatrix()
+        glTranslatef(0, 0, 30)
+        glColor3f(0.7, 0.7, 0.7)
+        glScalef(1.8, 1.0, 1.5) 
+        glutSolidCube(20)
         glPopMatrix()
         
-    glColor3f(1.0, 0.5, 0.0) 
-    glPushMatrix()
-    glTranslatef(0, 0, 12) 
-    glRotatef(15, 1, 0, 0) 
-    glPushMatrix()
-    glScalef(1.5, 1.5, 0.1)
-    glutSolidCube(25) 
-    glPopMatrix()
-    glTranslatef(0, 0, 2)
-    gluCylinder(gluNewQuadric(), 12, 8, 15, 10, 10)
-    glPopMatrix()
-    glPopMatrix() 
-    
-    glPushMatrix()
-    glTranslatef(0, 0, 30)
-    glColor3f(0.7, 0.7, 0.7)
-    glScalef(1.8, 1.0, 1.5) 
-    glutSolidCube(20)
-    glPopMatrix()
-    
-    glPushMatrix()
-    glTranslatef(15, 10, 30)
-    glColor3f(0.6, 0.6, 0.6)
-    glRotatef(45, 1, 0, 0) 
-    gluCylinder(gluNewQuadric(), 3, 3, 30, 10, 10) 
-    
-    glTranslatef(0, 0, 30)
-    glColor3f(0.4, 0.2, 0.0) 
-    gluCylinder(gluNewQuadric(), 4, 4, 25, 10, 10) 
-    
-    glTranslatef(0, 0, 25)
-    glColor3f(1.0, 0.5, 0.0) 
-    gluSphere(gluNewQuadric(), 12, 10, 10)
-    glTranslatef(0, 0, 2)
-    glColor3f(1.0, 1.0, 0.0) 
-    gluSphere(gluNewQuadric(), 8, 10, 10)
-    glPopMatrix()
-    
-    glPopMatrix()
+        glPushMatrix()
+        glTranslatef(15, 10, 30)
+        glColor3f(0.6, 0.6, 0.6)
+        glRotatef(45, 1, 0, 0) 
+        gluCylinder(gluNewQuadric(), 3, 3, 30, 10, 10) 
+        
+        glTranslatef(0, 0, 30)
+        glColor3f(0.4, 0.2, 0.0) 
+        gluCylinder(gluNewQuadric(), 4, 4, 25, 10, 10) 
+        
+        glTranslatef(0, 0, 25)
+        glColor3f(1.0, 0.5, 0.0) 
+        gluSphere(gluNewQuadric(), 12, 10, 10)
+        glTranslatef(0, 0, 2)
+        glColor3f(1.0, 1.0, 0.0) 
+        gluSphere(gluNewQuadric(), 8, 10, 10)
+        glPopMatrix()
+        
+        glPopMatrix()
+
+    if boss_is_dying:
+        for p in boss_death_particles:
+            glPushMatrix()
+            glTranslatef(p['x'], p['y'], p['z'])
+            glColor3f(p['r'], p['g'], p['b'])
+            glutSolidSphere(random.uniform(3, 8), 10, 10)
+            glPopMatrix()
+
+def draw_boss_shockwave():
+    global boss, boss_shockwave_radius, boss_shockwave_active
+    # NEW: Render the expanding shockwave
+    if boss_shockwave_active:
+        glPushMatrix()
+        glTranslatef(boss['x'], boss['y'], 10) 
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+        
+        glColor4f(1.0, 0.0, 1.0, 0.8) 
+        glutWireTorus(15, boss_shockwave_radius, 15, 40)
+        
+        glColor4f(0.5, 0.0, 0.5, 0.4) 
+        glutSolidTorus(10, boss_shockwave_radius - 5, 15, 40)
+
+        glDisable(GL_BLEND)
+        glPopMatrix()
 
 def draw_boss_orb():
     global boss_orb_pos, boss_orb_radius
@@ -612,10 +706,11 @@ def draw_orb_projectile():
     glPopMatrix()
 
 def draw_player():
-    global pos_x, pos_y, pos_angle, domain_mode, is_swinging, katana_swing_angle, orb_active, game_over, player_iframes
+    global pos_x, pos_y, pos_z, pos_angle, domain_mode, is_swinging, katana_swing_angle, orb_active, game_over, player_iframes
     
     glPushMatrix()
-    glTranslatef(pos_x, pos_y, 5)
+    # NEW: Player translates on Z axis when jumping
+    glTranslatef(pos_x, pos_y, pos_z + 5)
     glRotatef(pos_angle, 0, 0, 1)
 
     if game_over:
@@ -706,17 +801,13 @@ def draw_player():
         glDisable(GL_BLEND)
         glPopMatrix()
 
-    if domain_mode:
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
-        glColor4f(0.5, 0, 1.0, 0.2)
-        glutSolidSphere(70, 20, 20)
-        glDisable(GL_BLEND)
-
     glPopMatrix()
 
 def draw_ground():
-    glColor3f(0.1, 0.1, 0.1)
+    if domain_mode:
+        glColor3f(0.08, 0.0, 0.15)
+    else:
+        glColor3f(0.1, 0.1, 0.1)
     glBegin(GL_QUADS)
     glVertex3f(-GRID_LENGTH, -GRID_LENGTH, 0)
     glVertex3f(GRID_LENGTH, -GRID_LENGTH, 0)
@@ -758,7 +849,8 @@ def draw_broken_building(x, y, height_floors):
         if domain_mode: glColor3f(1.0, 0.9, 0.8) 
         else: glColor3f(0.9, 0.9, 0.9)
         glutSolidCube(60) 
-        glColor3f(0.1, 0.1, 0.1) 
+        if domain_mode: glColor3f(0.0, 1.0, 1.0)
+        else: glColor3f(0.1, 0.1, 0.1) 
         for k in range(-1, 2, 2):
             glPushMatrix()
             glTranslatef(0, k * 30.1, 15)
@@ -795,10 +887,10 @@ def camera_control():
         rad = math.radians(pos_angle + 90)
         xEye = pos_x - math.cos(rad) * 30
         yEye = pos_y - math.sin(rad) * 30
-        zEye = 90
+        zEye = pos_z + 90
         lookx = pos_x - math.cos(rad) * 300
         looky = pos_y - math.sin(rad) * 300
-        lookz = 60
+        lookz = pos_z + 60
         return (xEye, yEye, zEye, lookx, looky, lookz)
 
     cx, cy, cz = camera_position()
@@ -808,11 +900,16 @@ def camera_control():
     return (cx, cy, cz, lookx, looky, lookz)
 
 def setupCamera():
+    global domain_roll
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
     gluPerspective(fov_y, 1.25, 0.1, 5000)
+    
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
+    
+    glRotatef(domain_roll, 0, 0, 1) 
+    
     ex, ey, ez, lx, ly, lz = camera_control()
     gluLookAt(ex, ey, ez, lx, ly, lz, 0, 0, 1)
 
@@ -821,6 +918,8 @@ def keyboardListener(key, x, y):
     global keys, domain_mode, orb_active, orb_pos, orb_dir, pos_x, pos_y, cheat_mode
     global game_over, player_health, max_health, score, enemies, loot_drops, camera_distance
     global boss_active, boss_defeated, boss_health, boss_orb_active, last_orb_fire_time, boss_is_rising, domain_animating
+    global domain_roll, boss_is_dying, boss_death_timer, boss_death_particles
+    global is_jumping, jump_timer, JUMP_FRAMES
 
     if key == b'\x1b': 
         os._exit(0) 
@@ -835,6 +934,11 @@ def keyboardListener(key, x, y):
             boss_is_rising = False
             domain_mode = False
             domain_animating = False
+            
+            domain_roll = 0.0
+            boss_is_dying = False
+            boss_death_timer = 120
+            boss_death_particles.clear()
             
             score = 0
             max_health = 5 
@@ -852,15 +956,20 @@ def keyboardListener(key, x, y):
     if key in keys:
         keys[key] = True
 
-    if key == b'x' or key == b'X': domain_mode = not domain_mode
     if key == b'c' or key == b'C': cheat_mode = not cheat_mode
     
+    # NEW: JUMP INPUT
+    if key == b' ':
+        if not is_jumping and not domain_animating:
+            is_jumping = True
+            jump_timer = JUMP_FRAMES
+    
     if key == b'f' or key == b'F':
-        if not cheat_mode and not domain_animating: # Cannot fire during cutscene
+        if not cheat_mode and not domain_animating: 
             current_time = time.time()
             if not orb_active and (current_time - last_orb_fire_time) >= 3.0:
                 orb_active = True
-                orb_pos = [pos_x, pos_y, 60]
+                orb_pos = [pos_x, pos_y, pos_z + 60]
                 rad_p = math.radians(pos_angle)
                 orb_dir = [math.sin(rad_p), -math.cos(rad_p), 0] 
                 last_orb_fire_time = current_time
@@ -873,7 +982,7 @@ def keyboardListener(key, x, y):
 
 def specialKeyListener(key, x, y):
     global camera_angle, camera_pitch, domain_animating
-    if domain_animating: return # Freeze camera controls during animation
+    if domain_animating: return 
     
     if key == GLUT_KEY_RIGHT: camera_angle -= 3
     elif key == GLUT_KEY_LEFT: camera_angle += 3
@@ -896,28 +1005,28 @@ def mouseListener(button, state, x, y):
 
 # ================= LOGIC =================
 def update_logic():
-    global pos_x, pos_y, pos_angle, is_swinging, katana_swing_angle
+    global pos_x, pos_y, pos_z, pos_angle, is_swinging, katana_swing_angle
     global orb_active, orb_pos, orb_dir, player_x, player_y, player_z
     global camera_angle, cheat_mode, game_over, boss_defeated, boss_active
-    global domain_animating, domain_anim_angle, domain_mode, boss_is_rising
+    global domain_animating, domain_anim_angle, domain_mode, boss_is_rising, domain_roll
+    global is_jumping, jump_timer
 
     if game_over or boss_defeated: return 
 
-    # NEW: Cinematic Animation Logic
     if domain_animating:
-        camera_angle += 3.0       # Auto-spin the camera
-        domain_anim_angle += 3.0  # Track exactly how far we spun
-        
-        # When we reach halfway (180 degrees), swap the colors to dark mode
+        camera_angle += 3.0       
+        domain_anim_angle += 3.0  
+        domain_roll = domain_anim_angle 
+            
         if domain_anim_angle >= 180 and not domain_mode:
             domain_mode = True
             
-        # When we finish spinning 360 degrees
         if domain_anim_angle >= 360:
-            domain_animating = False # End cutscene
-            boss_is_rising = True    # Tell the boss to start climbing out of the ground
+            domain_animating = False 
+            boss_is_rising = True    
+            domain_roll = 0.0 
             
-        return # **CRITICAL: Freeze all player input and movement below while spinning!**
+        return 
 
     if not boss_active and random.randint(1, 60) == 1: 
         spawn_enemy()
@@ -951,13 +1060,22 @@ def update_logic():
             pos_y += mvy * speed
             pos_angle = math.degrees(math.atan2(mvy, mvx)) + 90
 
+    # NEW: JUMP PHYSICS UPDATE
+    if is_jumping:
+        jump_timer -= 1
+        progress = (JUMP_FRAMES - jump_timer) / JUMP_FRAMES
+        pos_z = math.sin(progress * math.pi) * MAX_JUMP_HEIGHT
+        if jump_timer <= 0:
+            is_jumping = False
+            pos_z = 0
+
     world_limit = GRID_LENGTH - 200
     pos_x = max(-world_limit, min(world_limit, pos_x))
     pos_y = max(-world_limit, min(world_limit, pos_y))
 
     player_x = pos_x
     player_y = pos_y
-    player_z = 0
+    player_z = pos_z  # NEW: Camera follows the jump
 
     if is_swinging:
         katana_swing_angle += 15
@@ -976,7 +1094,7 @@ def update_logic():
 def showScreen():
     update_logic()
 
-    if domain_mode: glClearColor(0.08, 0.0, 0.0, 1.0)
+    if domain_mode: glClearColor(0.08, 0.0, 0.15, 1.0)
     else: glClearColor(0.4, 0.3, 0.2, 1.0)
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -986,25 +1104,22 @@ def showScreen():
     draw_ground()
     draw_scenery()
     
-    # NEW: The Expanding Domain Sphere Visual
     if domain_animating:
         glPushMatrix()
-        glTranslatef(pos_x, pos_y, 0) # Center the sphere on the player
+        glTranslatef(pos_x, pos_y, 0) 
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        
-        # Calculate size based on spin progress (grows massively over the 360 frames)
         expansion_radius = domain_anim_angle * 15 
-        
-        # Draw a glowing, expanding dark purple dome
         glColor4f(0.2, 0.0, 0.4, 0.6)
         glutSolidSphere(expansion_radius, 40, 40)
-        
         glDisable(GL_BLEND)
         glPopMatrix()
 
     if not boss_active: draw_enemies()
-    if boss_active: draw_boss()
+    if boss_active: 
+        draw_boss()
+        draw_boss_shockwave() # NEW: Render the expanding shockwave
+        
     if boss_orb_active: draw_boss_orb()
         
     draw_loot() 

@@ -37,6 +37,12 @@ domain_roll = 0.0
 domain_animating = False
 domain_spin_progress = 0.0
 domain_anim_angle = 0.0
+# Jumping variables
+pos_z = 0.0
+is_jumping = False
+jump_timer = 0
+JUMP_FRAMES = 30
+MAX_JUMP_HEIGHT = 80
 
 building_data = []
 tree_data = []
@@ -81,6 +87,12 @@ boss_orb_radius = 20
 boss_orb_speed = 15
 boss_orb_cooldown = 0 # NEW: Boss attack cooldown
 boss_is_rising = False
+
+# Boss shockwave
+boss_shockwave_active = False
+boss_shockwave_radius = 0.0
+boss_shockwave_speed = 12.0
+boss_shockwave_cooldown = 0
 
 # ================= WORLD GENERATION =================
 def generate_world_data():
@@ -239,6 +251,21 @@ def check_collisions():
                 if player_health <= 0:
                     player_health = 0
                     game_over = True
+            # Boss shockwave collision
+            if boss_shockwave_active:
+                dist_to_player = math.hypot(boss['x'] - pos_x, boss['y'] - pos_y)
+                if abs(dist_to_player - boss_shockwave_radius) <= 20 and pos_z < 30 and player_iframes <= 0:
+                    player_health -= 1
+                    player_iframes = 60
+                    # small knockback away from boss
+                    dx = pos_x - boss['x']
+                    dy = pos_y - boss['y']
+                    d = math.hypot(dx, dy) or 1.0
+                    pos_x += (dx / d) * 20
+                    pos_y += (dy / d) * 20
+                    if player_health <= 0:
+                        player_health = 0
+                        game_over = True
                     
         if boss_health <= 0:
             boss_active = False
@@ -621,11 +648,32 @@ def draw_orb_projectile():
     glDisable(GL_BLEND)
     glPopMatrix()
 
+def draw_boss_shockwave():
+    global boss_shockwave_active, boss_shockwave_radius, boss
+    if not boss_shockwave_active:
+        return
+    glPushMatrix()
+    glTranslatef(boss['x'], boss['y'], 10)
+    glDisable(GL_LIGHTING)
+    glColor4f(1.0, 0.0, 1.0, 0.6)
+    # Try wire torus; fallback to circle polyline
+    try:
+        glutWireTorus(2.0, boss_shockwave_radius, 8, 64)
+    except Exception:
+        glBegin(GL_LINE_LOOP)
+        steps = 64
+        for i in range(steps):
+            a = (i / float(steps)) * 2.0 * math.pi
+            glVertex3f(math.cos(a) * boss_shockwave_radius, math.sin(a) * boss_shockwave_radius, 0)
+        glEnd()
+    glEnable(GL_LIGHTING)
+    glPopMatrix()
+
 def draw_player():
     global pos_x, pos_y, pos_angle, domain_mode, is_swinging, katana_swing_angle, orb_active, game_over, player_iframes
     
     glPushMatrix()
-    glTranslatef(pos_x, pos_y, 5)
+    glTranslatef(pos_x, pos_y, pos_z + 5)
     glRotatef(pos_angle, 0, 0, 1)
 
     if game_over:
@@ -849,6 +897,7 @@ def keyboardListener(key, x, y):
     global game_over, player_health, max_health, score, enemies, loot_drops, camera_distance
     global boss_active, boss_defeated, boss_health, boss_orb_active, last_orb_fire_time
     global domain_roll, domain_animating, domain_spin_progress
+    global is_jumping, jump_timer, JUMP_FRAMES
 
     if key == b'\x1b': 
         os._exit(0) 
@@ -883,6 +932,11 @@ def keyboardListener(key, x, y):
 
     if key in keys:
         keys[key] = True
+
+    # Jump (space) - only if not already jumping and not during domain animation
+    if key == b' ' and not is_jumping and not domain_animating:
+        is_jumping = True
+        jump_timer = JUMP_FRAMES
 
     # if key == b'x' or key == b'X': domain_mode = not domain_mode
     if key == b'c' or key == b'C': cheat_mode = not cheat_mode
@@ -1005,6 +1059,18 @@ def update_logic():
             except Exception:
                 pass
 
+    # Jump math
+    global pos_z, is_jumping, jump_timer, JUMP_FRAMES, MAX_JUMP_HEIGHT
+    if is_jumping:
+        if jump_timer > 0:
+            jump_timer -= 1
+            t = (JUMP_FRAMES - jump_timer) / float(JUMP_FRAMES)
+            pos_z = math.sin(t * math.pi) * MAX_JUMP_HEIGHT
+        else:
+            is_jumping = False
+            pos_z = 0
+    player_z = pos_z
+
 # ================= RENDER =================
 def showScreen():
     update_logic()
@@ -1022,6 +1088,8 @@ def showScreen():
     if not boss_active: draw_enemies()
     if boss_active: draw_boss()
     if boss_orb_active: draw_boss_orb()
+    # Boss shockwave visual
+    draw_boss_shockwave()
         
     draw_loot() 
     draw_player()
