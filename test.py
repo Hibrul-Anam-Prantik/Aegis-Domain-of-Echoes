@@ -350,6 +350,13 @@ def draw_ui():
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
     glLoadIdentity()
+    # Ensure UI draws on top: disable depth test and lighting while rendering UI
+    glPushAttrib(GL_ENABLE_BIT)
+    glDisable(GL_DEPTH_TEST)
+    try:
+        glDisable(GL_LIGHTING)
+    except Exception:
+        pass
     
     # 1. NEW: Visual Player Health Bar
     bar_x = 20
@@ -409,12 +416,13 @@ def draw_ui():
     elif boss_defeated:
         draw_rect(0, 0, 1000, 800, 0.0, 0.2, 0.0, 0.7) # Green Tint Overlay
         glColor3f(0.0, 1.0, 0.0) 
-        draw_text(250, 450, "FINAL BOSS BUSTED!\nVICTORY!!!", font=GLUT_BITMAP_TIMES_ROMAN_24)
+        draw_text(250, 450, "FINAL BOSS DEFEATED!", font=GLUT_BITMAP_TIMES_ROMAN_24)
         glColor3f(1.0, 1.0, 1.0) 
         draw_text(420, 400, f"FINAL SCORE: {score}")
         draw_text(320, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
 
-    # Restore 3D Matrices
+    # Restore 3D Matrices and GL state
+    glPopAttrib()
     glMatrixMode(GL_PROJECTION)
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
