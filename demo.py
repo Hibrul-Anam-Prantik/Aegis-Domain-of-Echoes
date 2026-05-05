@@ -660,36 +660,50 @@ def draw_boss_orb():
 
 def draw_boss_shockwave():
     global boss, boss_shockwave_radius, boss_shockwave_active
+    
     if boss_shockwave_active:
         glPushMatrix()
         glTranslatef(boss['x'], boss['y'], 10)
+        
+        # 1. SAVE THE CURRENT OPENGL STATE
+        glPushAttrib(GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT) 
+        
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE)
 
-        glColor4f(1.0, 0.0, 1.0, 0.8)
-        try:
-            glutWireTorus(15, boss_shockwave_radius, 15, 40)
-        except Exception:
-            segments = 80
-            glBegin(GL_LINE_LOOP)
-            for i in range(segments):
-                a = (i / float(segments)) * (2.0 * math.pi)
-                glVertex3f(math.cos(a) * boss_shockwave_radius, math.sin(a) * boss_shockwave_radius, 0)
-            glEnd()
+        segments = 60 
+        thickness = 15
 
-        glColor4f(0.5, 0.0, 0.5, 0.4)
-        try:
-            glutSolidTorus(10, max(0.0, boss_shockwave_radius - 5), 15, 40)
-        except Exception:
-            segments = 80
-            glBegin(GL_TRIANGLE_FAN)
-            glVertex3f(0, 0, 0)
-            for i in range(segments + 1):
-                a = (i / float(segments)) * (2.0 * math.pi)
-                glVertex3f(math.cos(a) * max(0.0, boss_shockwave_radius - 5), math.sin(a) * max(0.0, boss_shockwave_radius - 5), 0)
-            glEnd()
+        # THE OUTER EDGE
+        glColor4f(1.0, 0.0, 1.0, 0.8) 
+        glBegin(GL_LINE_LOOP)
+        for i in range(segments):
+            angle = (i / float(segments)) * (2.0 * math.pi)
+            x = math.cos(angle) * boss_shockwave_radius
+            y = math.sin(angle) * boss_shockwave_radius
+            glVertex3f(x, y, 0)
+        glEnd()
 
-        glDisable(GL_BLEND)
+        # THE INNER CORE BAND
+        glColor4f(0.5, 0.0, 0.5, 0.4) 
+        inner_radius = max(0.0, boss_shockwave_radius - thickness)
+        
+        glBegin(GL_QUAD_STRIP)
+        for i in range(segments + 1): 
+            angle = (i / float(segments)) * (2.0 * math.pi)
+            
+            in_x = math.cos(angle) * inner_radius
+            in_y = math.sin(angle) * inner_radius
+            glVertex3f(in_x, in_y, 0)
+            
+            out_x = math.cos(angle) * boss_shockwave_radius
+            out_y = math.sin(angle) * boss_shockwave_radius
+            glVertex3f(out_x, out_y, 0)
+        glEnd()
+
+        # 2. RESTORE THE OLD STATE (This automatically removes the blending)
+        glPopAttrib() 
+
         glPopMatrix()
 
 def draw_orb_projectile():
