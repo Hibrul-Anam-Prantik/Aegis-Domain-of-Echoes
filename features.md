@@ -1,4 +1,4 @@
-# ⛩️ REVERSE ISEKAI: GATE OF THE SHATTERED REALMS
+# ⛩️ Aegis: Domain of Echoes
 
 **"Reverse Isekai"** is a high-octane 3D Arena-Defense game built with Python and PyOpenGL. Players take on the role of the **Gatekeeper**, the last line of defense at the universal origin $(0, 0, 0)$, tasked with protecting the portal from multidimensional threats.
 
