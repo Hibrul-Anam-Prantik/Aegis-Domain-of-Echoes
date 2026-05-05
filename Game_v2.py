@@ -154,7 +154,7 @@ def update_behavior():
             
         for i, e in enumerate(enemies):
             dist = distance_3d((e['x'], e['y'], e['z']), (pos_x, pos_y, 0))
-            if dist > 50:
+            if dist > 35:
                 e['x'] += (pos_x - e['x']) / dist * enemy_speed
                 e['y'] += (pos_y - e['y']) / dist * enemy_speed
 
@@ -912,28 +912,27 @@ def keyboardListener(key, x, y):
     if key == b'\x1b': 
         os._exit(0) 
 
-    if game_over or boss_defeated:
-        if key == b'r' or key == b'R':
-            game_over = False
-            boss_defeated = False 
-            boss_active = False
-            boss_health = 100
-            boss_orb_active = False
-            boss_is_rising = False
-            domain_mode = False
-            domain_animating = False
+    if key == b'r' or key == b'R':
+        game_over = False
+        boss_defeated = False 
+        boss_active = False
+        boss_health = 100
+        boss_orb_active = False
+        boss_is_rising = False
+        domain_mode = False
+        domain_animating = False
             
-            score = 0
-            max_health = 5 
-            player_health = max_health 
-            pos_x = 0
-            pos_y = 0
-            orb_active = False 
-            last_orb_fire_time = 0.0
+        score = 0
+        max_health = 5 
+        player_health = max_health 
+        pos_x = 0
+        pos_y = 0
+        orb_active = False 
+        last_orb_fire_time = 0.0
             
-            enemies.clear()
-            loot_drops.clear()
-            for k in keys: keys[k] = False 
+        enemies.clear()
+        loot_drops.clear()
+        for k in keys: keys[k] = False 
         return 
 
     if key in keys:
