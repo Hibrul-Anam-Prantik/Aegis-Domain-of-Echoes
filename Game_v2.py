@@ -914,6 +914,10 @@ def reset_game():
     global domain_mode, domain_animating, score, max_health, player_health, pos_x, pos_y
     global orb_active, last_orb_fire_time, enemies, loot_drops, keys
     global pos_z, is_jumping, jump_timer, player_iframes
+    
+    # clear cheat mode
+    global cheat_mode
+    cheat_mode = False
 
     game_over = False
     boss_defeated = False
