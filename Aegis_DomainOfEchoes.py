@@ -409,16 +409,16 @@ def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
         glutBitmapCharacter(font, ord(ch))
 
 def draw_rect(x, y, width, height, r, g, b, a=1.0):
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    glColor4f(r, g, b, a)
+    # Template-only: use solid colors (ignore alpha) and GL_QUADS
+    glColor3f(r, g, b)
     glBegin(GL_QUADS)
     glVertex2f(x, y)
     glVertex2f(x + width, y)
     glVertex2f(x + width, y + height)
     glVertex2f(x, y + height)
     glEnd()
-    glDisable(GL_BLEND)
+    # restore color to white as a manual reset
+    glColor3f(1.0, 1.0, 1.0)
 
 def draw_ui():
     global player_health, max_health, score, game_over, boss_active, boss_health, boss_max_health, boss_defeated
@@ -432,8 +432,8 @@ def draw_ui():
     glPushMatrix()
     glLoadIdentity()
     
-    # Draw UI overlay on top of the 3D scene. Disable depth test/lighting so it is always visible.
-    glPushAttrib(GL_ENABLE_BIT)
+    # Draw UI overlay on top of the 3D scene. Disable depth test so it is always visible.
+    # NOTE: glPushAttrib/glPopAttrib are removed per template-only rules.
     glDisable(GL_DEPTH_TEST)
     try:
         glDisable(GL_LIGHTING)
@@ -499,7 +499,8 @@ def draw_ui():
         draw_text(420, 400, f"FINAL SCORE: {score}")
         draw_text(320, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
     # Restore GL state and matrices
-    glPopAttrib()
+    # Re-enable depth test manually (since we disabled it above)
+    glEnable(GL_DEPTH_TEST)
     glMatrixMode(GL_PROJECTION)
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
@@ -652,61 +653,51 @@ def draw_boss_orb():
     global boss_orb_pos, boss_orb_radius
     glPushMatrix()
     glTranslatef(boss_orb_pos[0], boss_orb_pos[1], boss_orb_pos[2])
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE)
-    glColor4f(1.0, 0.5, 0.0, 0.9) 
+    # Template-only: draw as a solid colored sphere (no blending)
+    glColor3f(1.0, 0.5, 0.0)
     glutSolidSphere(boss_orb_radius, 20, 20)
-    glDisable(GL_BLEND)
+    glColor3f(1.0, 1.0, 1.0)
     glPopMatrix()
 
 def draw_boss_shockwave():
     global boss, boss_shockwave_radius, boss_shockwave_active
-    # Rendering the expanding shockwave
+    # Draw a quad-based ring as the shockwave (template-only functions)
     if boss_shockwave_active:
         glPushMatrix()
         glTranslatef(boss['x'], boss['y'], 10)
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+        glColor3f(1.0, 0.0, 1.0)  # solid magenta
 
-        # Bright magenta wireframe outer ring - shockwave
-        glColor4f(1.0, 0.0, 1.0, 0.8)
-        try:
-            glutWireTorus(15, boss_shockwave_radius, 15, 40)
-        except Exception:
-            # Fallback: draw a wire circle using line loop
-            segments = 80
-            glBegin(GL_LINE_LOOP)
-            for i in range(segments):
-                a = (i / float(segments)) * (2.0 * math.pi)
-                glVertex3f(math.cos(a) * boss_shockwave_radius, math.sin(a) * boss_shockwave_radius, 0)
-            glEnd()
+        segments = 20
+        width = 20
+        outer_r = boss_shockwave_radius
+        inner_r = max(0.0, outer_r - width)
 
-        # Slightly darker filled core ring for depth
-        glColor4f(0.5, 0.0, 0.5, 0.4)
-        try:
-            glutSolidTorus(10, max(0.0, boss_shockwave_radius - 5), 15, 40)
-        except Exception:
-            # Fallback: draw a filled circle using triangle fan
-            segments = 80
-            glBegin(GL_TRIANGLE_FAN)
-            glVertex3f(0, 0, 0)
-            for i in range(segments + 1):
-                a = (i / float(segments)) * (2.0 * math.pi)
-                glVertex3f(math.cos(a) * max(0.0, boss_shockwave_radius - 5), math.sin(a) * max(0.0, boss_shockwave_radius - 5), 0)
-            glEnd()
+        glBegin(GL_QUADS)
+        for i in range(segments):
+            angle1 = (i / float(segments)) * 2.0 * math.pi
+            angle2 = ((i + 1) / float(segments)) * 2.0 * math.pi
 
-        glDisable(GL_BLEND)
+            # Outer edge
+            glVertex3f(math.cos(angle1) * outer_r, math.sin(angle1) * outer_r, 0)
+            glVertex3f(math.cos(angle2) * outer_r, math.sin(angle2) * outer_r, 0)
+
+            # Inner edge
+            glVertex3f(math.cos(angle2) * inner_r, math.sin(angle2) * inner_r, 0)
+            glVertex3f(math.cos(angle1) * inner_r, math.sin(angle1) * inner_r, 0)
+        glEnd()
+
+        # reset color to white
+        glColor3f(1.0, 1.0, 1.0)
         glPopMatrix()
 
 def draw_orb_projectile():
     global orb_pos
     glPushMatrix()
     glTranslatef(orb_pos[0], orb_pos[1], orb_pos[2])
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE)
-    glColor4f(0, 1, 1, 0.8)
+    # Template-only: draw as solid cyan sphere
+    glColor3f(0.0, 1.0, 1.0)
     glutSolidSphere(15, 20, 20)
-    glDisable(GL_BLEND)
+    glColor3f(1.0, 1.0, 1.0)
     glPopMatrix()
 
 def draw_player():
@@ -794,23 +785,20 @@ def draw_player():
         glTranslatef(28, -8, 60) 
         if domain_mode: glColor3f(0.0, 1.0, 1.0) 
         else: glColor3f(0.5, 0.8, 1.0) 
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
-        if domain_mode: glColor4f(0, 1, 1, 0.4)
-        else: glColor4f(0.5, 0.8, 1, 0.3)
-        glutSolidSphere(15, 20, 20) 
-        if domain_mode: glColor3f(1, 1, 1) 
+        # Draw orbs as solid colors (no blending)
+        if domain_mode: glColor3f(0.0, 1.0, 1.0)
+        else: glColor3f(0.5, 0.8, 1.0)
+        glutSolidSphere(15, 20, 20)
+        if domain_mode: glColor3f(1, 1, 1)
         else: glColor3f(0.7, 0.9, 1.0)
-        glutSolidSphere(7, 16, 16) 
-        glDisable(GL_BLEND)
+        glutSolidSphere(7, 16, 16)
         glPopMatrix()
 
     if domain_mode:
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
-        glColor4f(0.5, 0, 1.0, 0.2)
+        # Domain sphere rendered as solid color (no transparency)
+        glColor3f(0.5, 0, 1.0)
         glutSolidSphere(70, 20, 20)
-        glDisable(GL_BLEND)
+        glColor3f(1.0, 1.0, 1.0)
 
     glPopMatrix()
 
@@ -1164,17 +1152,13 @@ def showScreen():
     if domain_animating:
         glPushMatrix()
         glTranslatef(pos_x, pos_y, 0) # Center the sphere on the player
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        
+        # Render as solid color sphere (no blending allowed by template)
         # Calculate size based on spin progress (grows massively over the 360 frames)
         expansion_radius = domain_anim_angle * 15 
-        
-        # Draw a glowing, expanding dark purple dome
-        glColor4f(0.2, 0.0, 0.4, 0.6)
+        # Draw a solid dark purple dome (no transparency)
+        glColor3f(0.2, 0.0, 0.4)
         glutSolidSphere(expansion_radius, 40, 40)
-        
-        glDisable(GL_BLEND)
+        glColor3f(1.0, 1.0, 1.0)
         glPopMatrix()
 
     if not boss_active: draw_enemies()
