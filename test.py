@@ -401,7 +401,7 @@ def draw_ui():
     if game_over:
         draw_rect(0, 0, 1000, 800, 0.2, 0.0, 0.0, 0.7) # Red Tint Overlay
         glColor3f(1.0, 0.0, 0.0) 
-        draw_text(350, 450, "GAME OVER, YOU DIED", font=GLUT_BITMAP_TIMES_ROMAN_24)
+        draw_text(350, 450, "WASTED!!", font=GLUT_BITMAP_TIMES_ROMAN_24)
         glColor3f(1.0, 1.0, 1.0)
         draw_text(420, 400, f"FINAL SCORE: {score}")
         draw_text(300, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
@@ -409,7 +409,7 @@ def draw_ui():
     elif boss_defeated:
         draw_rect(0, 0, 1000, 800, 0.0, 0.2, 0.0, 0.7) # Green Tint Overlay
         glColor3f(0.0, 1.0, 0.0) 
-        draw_text(220, 450, "CONGRATULATIONS, YOU WON! KEEP UP THE SPIRIT!", font=GLUT_BITMAP_TIMES_ROMAN_24)
+        draw_text(250, 450, "FINAL BOSS BUSTED!\nVICTORY!!!", font=GLUT_BITMAP_TIMES_ROMAN_24)
         glColor3f(1.0, 1.0, 1.0) 
         draw_text(420, 400, f"FINAL SCORE: {score}")
         draw_text(320, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
