@@ -890,7 +890,7 @@ def keyboardListener(key, x, y):
     if key in keys:
         keys[key] = True
 
-    if key == b'x' or key == b'X': domain_mode = not domain_mode
+    # if key == b'x' or key == b'X': domain_mode = not domain_mode
     if key == b'c' or key == b'C': cheat_mode = not cheat_mode
     
     if key == b'f' or key == b'F':
