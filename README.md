@@ -1,5 +1,3 @@
-# ⛩️ Project Title: "REVERSE ISEKAI: GATE OF THE SHATTERED REALMS"
-
 # ⛩️ Aegis: Domain of Echoes
 
 ## The Vision
