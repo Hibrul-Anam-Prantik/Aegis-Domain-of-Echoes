@@ -151,10 +151,12 @@ def update_behavior():
     if not boss_active:
         while len(enemies) < 5:
             spawn_enemy()
-            
+
+        stopping_distance = 35 # Prevents enemy stacking on player
+
         for i, e in enumerate(enemies):
             dist = distance_3d((e['x'], e['y'], e['z']), (pos_x, pos_y, 0))
-            if dist > 35:
+            if dist > stopping_distance:
                 e['x'] += (pos_x - e['x']) / dist * enemy_speed
                 e['y'] += (pos_y - e['y']) / dist * enemy_speed
 
