@@ -471,7 +471,7 @@ def keyboardListener(key, x, y):
         katana_swing_timer = 15
         katana_swing_angle = 0
 
-    if key == b'n' or key == b'N':
+    if key == b' ':
         # space triggers a jump to dodge shockwaves
         global is_jumping, jump_timer
         if not is_jumping:
