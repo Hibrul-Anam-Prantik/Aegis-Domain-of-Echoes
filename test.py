@@ -61,6 +61,7 @@ boss = {'x': 0, 'y': 0, 'z': 0, 'radius': 50}
 boss_health = 100
 boss_max_health = 100 # NEW: For the health bar
 boss_hit_this_swing = False
+boss_is_rising = False
 
 boss_orb_active = False
 boss_orb_pos = [0, 0, 0]
@@ -107,6 +108,7 @@ def spawn_enemy():
 def update_behavior():
     global enemies, pos_x, pos_y, score, max_health, player_health
     global boss_active, boss_defeated, boss, boss_orb_active, boss_orb_pos, boss_orb_dir, boss_orb_cooldown
+    global boss_is_rising, domain_mode
     
     # --- BOSS SPAWN TRIGGER ---
     if score >= 500 and not boss_active and not boss_defeated:
@@ -115,7 +117,8 @@ def update_behavior():
         player_health = 10 
         boss['x'] = random.uniform(-600, 600)
         boss['y'] = random.uniform(-600, 600)
-        boss['z'] = 0
+        boss['z'] = -400  # start deep underground
+        boss_is_rising = True
         domain_mode = True # Auto-trigger domain expansion visuals!
         enemies.clear() 
 
@@ -140,28 +143,36 @@ def update_behavior():
 
     # --- BOSS BEHAVIOR ---
     if boss_active:
-        dist = distance_3d((boss['x'], boss['y'], 0), (pos_x, pos_y, 0))
-        if dist > 140:
-            boss['x'] += (pos_x - boss['x']) / dist * 1.5 
-            boss['y'] += (pos_y - boss['y']) / dist * 1.5
-        
-        # NEW: Proper Boss Cooldown Logic
-        if boss_orb_cooldown > 0:
-            boss_orb_cooldown -= 1
+        # Rising animation: boss emerges from underground
+        if boss_is_rising:
+            boss['z'] += 4.0
+            if boss['z'] >= 0:
+                boss['z'] = 0
+                boss_is_rising = False
+            # While rising, boss is invulnerable and does not act
+        else:
+            dist = distance_3d((boss['x'], boss['y'], 0), (pos_x, pos_y, 0))
+            if dist > 140:
+                boss['x'] += (pos_x - boss['x']) / dist * 1.5 
+                boss['y'] += (pos_y - boss['y']) / dist * 1.5
+            
+            # NEW: Proper Boss Cooldown Logic
+            if boss_orb_cooldown > 0:
+                boss_orb_cooldown -= 1
 
-        if not boss_orb_active and boss_orb_cooldown <= 0:
-            boss_orb_active = True
-            boss_orb_cooldown = 120 # 2 seconds of cooldown before firing again
-            boss_orb_pos = [boss['x'], boss['y'], 80] 
-            dist_p = distance_3d(boss_orb_pos, (pos_x, pos_y, 60))
-            if dist_p > 0:
-                boss_orb_dir = [(pos_x - boss_orb_pos[0])/dist_p, (pos_y - boss_orb_pos[1])/dist_p, 0]
-                
-        if boss_orb_active:
-            boss_orb_pos[0] += boss_orb_dir[0] * boss_orb_speed
-            boss_orb_pos[1] += boss_orb_dir[1] * boss_orb_speed
-            if abs(boss_orb_pos[0]) > 1000 or abs(boss_orb_pos[1]) > 1000:
-                boss_orb_active = False
+            if not boss_orb_active and boss_orb_cooldown <= 0:
+                boss_orb_active = True
+                boss_orb_cooldown = 120 # 2 seconds of cooldown before firing again
+                boss_orb_pos = [boss['x'], boss['y'], 80] 
+                dist_p = distance_3d(boss_orb_pos, (pos_x, pos_y, 60))
+                if dist_p > 0:
+                    boss_orb_dir = [(pos_x - boss_orb_pos[0])/dist_p, (pos_y - boss_orb_pos[1])/dist_p, 0]
+                    
+            if boss_orb_active:
+                boss_orb_pos[0] += boss_orb_dir[0] * boss_orb_speed
+                boss_orb_pos[1] += boss_orb_dir[1] * boss_orb_speed
+                if abs(boss_orb_pos[0]) > 1000 or abs(boss_orb_pos[1]) > 1000:
+                    boss_orb_active = False
 
 def check_collisions():
     global orb_active, orb_pos, orb_radius, enemies, is_swinging, pos_x, pos_y, cheat_mode
@@ -181,13 +192,13 @@ def check_collisions():
         
     # --- BOSS COLLISIONS ---
     if boss_active:
-        if orb_active:
+        if orb_active and not boss_is_rising:
             dist_2d = math.hypot(orb_pos[0] - boss['x'], orb_pos[1] - boss['y'])
             if dist_2d <= (orb_radius + boss['radius']):
                 boss_health -= 10
                 orb_active = False 
                 
-        if is_swinging and not boss_hit_this_swing:
+        if is_swinging and not boss_hit_this_swing and not boss_is_rising:
             if distance_3d(player_pos, (boss['x'], boss['y'], 0)) < 160: 
                 rad_p = math.radians(pos_angle)
                 forward_x = math.sin(rad_p)
@@ -350,6 +361,13 @@ def draw_ui():
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
     glLoadIdentity()
+    # Ensure UI draws on top: disable depth test and lighting while rendering UI
+    glPushAttrib(GL_ENABLE_BIT)
+    glDisable(GL_DEPTH_TEST)
+    try:
+        glDisable(GL_LIGHTING)
+    except Exception:
+        pass
     
     # 1. NEW: Visual Player Health Bar
     bar_x = 20
@@ -401,7 +419,7 @@ def draw_ui():
     if game_over:
         draw_rect(0, 0, 1000, 800, 0.2, 0.0, 0.0, 0.7) # Red Tint Overlay
         glColor3f(1.0, 0.0, 0.0) 
-        draw_text(350, 450, "GAME OVER, YOU DIED", font=GLUT_BITMAP_TIMES_ROMAN_24)
+        draw_text(350, 450, "WASTED!!", font=GLUT_BITMAP_TIMES_ROMAN_24)
         glColor3f(1.0, 1.0, 1.0)
         draw_text(420, 400, f"FINAL SCORE: {score}")
         draw_text(300, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
@@ -409,12 +427,13 @@ def draw_ui():
     elif boss_defeated:
         draw_rect(0, 0, 1000, 800, 0.0, 0.2, 0.0, 0.7) # Green Tint Overlay
         glColor3f(0.0, 1.0, 0.0) 
-        draw_text(220, 450, "CONGRATULATIONS, YOU WON! KEEP UP THE SPIRIT!", font=GLUT_BITMAP_TIMES_ROMAN_24)
+        draw_text(250, 450, "FINAL BOSS DEFEATED!", font=GLUT_BITMAP_TIMES_ROMAN_24)
         glColor3f(1.0, 1.0, 1.0) 
         draw_text(420, 400, f"FINAL SCORE: {score}")
         draw_text(320, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
 
-    # Restore 3D Matrices
+    # Restore 3D Matrices and GL state
+    glPopAttrib()
     glMatrixMode(GL_PROJECTION)
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
