@@ -7,6 +7,13 @@ import sys
 import time
 import os
 
+# Provide safe fallbacks for GLUT bitmap fonts for static analysis/time-of-import safety
+if 'GLUT_BITMAP_HELVETICA_18' not in globals():
+    GLUT_BITMAP_HELVETICA_18 = 1
+
+if 'GLUT_BITMAP_TIMES_ROMAN_24' not in globals():
+    GLUT_BITMAP_TIMES_ROMAN_24 = 2
+
 # ---------------- CAMERA ----------------
 camera_angle = 0        
 camera_pitch = 15       
@@ -26,6 +33,11 @@ player_y = pos_y
 player_z = 0
 person_one = False
 domain_mode = False
+pos_z = 0
+is_jumping = False
+jump_timer = 0
+JUMP_FRAMES = 30
+MAX_JUMP_HEIGHT = 80
 
 building_data = []
 tree_data = []
@@ -48,25 +60,39 @@ cheat_mode = False
 
 player_health = 5
 max_health = 5
+player_iframes = 0  
 score = 0
 game_over = False
 loot_drops = []
 last_orb_fire_time = 0.0 
 
-# --- BOSS GLOBALS ---
+# --- BOSS & DOMAIN ANIMATION GLOBALS ---
 boss_active = False
 boss_defeated = False
 boss = {'x': 0, 'y': 0, 'z': 0, 'radius': 50} 
 boss_health = 100
+boss_max_health = 100 
 boss_hit_this_swing = False
+boss_is_rising = False 
+
+domain_animating = False      
+domain_anim_angle = 0         
 
 boss_orb_active = False
 boss_orb_pos = [0, 0, 0]
 boss_orb_dir = [0, 0, 0]
 boss_orb_radius = 20
 boss_orb_speed = 15
+boss_orb_cooldown = 0 
 
 # ================= WORLD GENERATION =================
+
+# Boss shockwave
+boss_shockwave_active = False
+boss_shockwave_radius = 0.0
+boss_shockwave_speed = 10.0
+boss_shockwave_cooldown = 0
+
 def generate_world_data():
     global building_data, tree_data, ash_particles
     building_data, tree_data, ash_particles = [], [], []
@@ -87,11 +113,12 @@ def generate_world_data():
 
     for _ in range(8000):
         ash_particles.append((random.uniform(-GRID_LENGTH, GRID_LENGTH), 
-                             random.uniform(-GRID_LENGTH, GRID_LENGTH), 
-                             random.uniform(0.15, 0.35)))
+                              random.uniform(-GRID_LENGTH, GRID_LENGTH), 
+                              random.uniform(0.15, 0.35)))
 
-# ================= PHYSICS & ENTITY BEHAVIOR (ENGINEER) =================
+# ================= PHYSICS & ENTITY BEHAVIOR =================
 def distance_3d(p1, p2):
+    # [COLLISION] Helper to calculate exact 3D distance between two points
     return math.sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2 + (p2[2]-p1[2])**2)
 
 def spawn_enemy():
@@ -102,30 +129,40 @@ def spawn_enemy():
     enemies.append({'x': x, 'y': y, 'z': z, 'radius': enemy_radius})
 
 def update_behavior():
-    global enemies, pos_x, pos_y, score, max_health, player_health
-    global boss_active, boss_defeated, boss, boss_orb_active, boss_orb_pos, boss_orb_dir
+    global enemies, pos_x, pos_y, score, max_health, player_health, domain_mode
+    global boss_active, boss_defeated, boss, boss_orb_active, boss_orb_pos, boss_orb_dir, boss_orb_cooldown
+    global boss_is_rising, domain_animating, domain_anim_angle
+    global boss_shockwave_active, boss_shockwave_radius, boss_shockwave_speed, boss_shockwave_cooldown
     
     # --- BOSS SPAWN TRIGGER ---
-    if score >= 500 and not boss_active and not boss_defeated:
+    if score >= 500 and not boss_active and not boss_defeated and not domain_animating:
+        enemies.clear() 
+        domain_animating = True   
+        domain_anim_angle = 0     
+
         boss_active = True
         max_health = 10
         player_health = 10 
-        boss['x'] = random.uniform(-600, 600)
-        boss['y'] = random.uniform(-600, 600)
-        boss['z'] = 0
-        enemies.clear() 
+        boss['x'] = random.uniform(-400, 400)
+        boss['y'] = random.uniform(-400, 400)
+        boss['z'] = -400 
+        boss_is_rising = False 
 
     # --- REGULAR ENEMY BEHAVIOR ---
     if not boss_active:
-        while len(enemies) < 5:
+        while len(enemies) < 5:  # [ENEMY] Spawning loop to keep 5 alive at all times
             spawn_enemy()
-            
+
+        stopping_distance = 35 
+
         for i, e in enumerate(enemies):
+            # [ENEMY] Move toward player using vector math
             dist = distance_3d((e['x'], e['y'], e['z']), (pos_x, pos_y, 0))
-            if dist > 50:
+            if dist > stopping_distance:
                 e['x'] += (pos_x - e['x']) / dist * enemy_speed
                 e['y'] += (pos_y - e['y']) / dist * enemy_speed
 
+            # [ENEMY] Separation algorithm (preventing enemy stacking)
             for j, other in enumerate(enemies):
                 if i != j: 
                     dist_between = distance_3d((e['x'], e['y'], 0), (other['x'], other['y'], 0))
@@ -135,63 +172,101 @@ def update_behavior():
                         e['y'] += ((e['y'] - other['y']) / dist_between) * (overlap * 0.1)
 
     # --- BOSS BEHAVIOR ---
-    if boss_active:
-        dist = distance_3d((boss['x'], boss['y'], 0), (pos_x, pos_y, 0))
-        if dist > 140:
-            boss['x'] += (pos_x - boss['x']) / dist * 1.5 
-            boss['y'] += (pos_y - boss['y']) / dist * 1.5
+    if boss_active and not domain_animating: 
+        if boss_is_rising:
+            boss['z'] += 4.0 # [BOSS] Cinematic rising animation
+            if boss['z'] >= 0:
+                boss['z'] = 0
+                boss_is_rising = False 
+        
+        else:
+            # [BOSS] Chase player slowly
+            dist = distance_3d((boss['x'], boss['y'], 0), (pos_x, pos_y, 0))
+            if dist > 140:
+                boss['x'] += (pos_x - boss['x']) / dist * 1.5 
+                boss['y'] += (pos_y - boss['y']) / dist * 1.5
             
-        if not boss_orb_active and random.randint(1, 5) == 1:
-            boss_orb_active = True
-            boss_orb_pos = [boss['x'], boss['y'], 80] 
-            dist_p = distance_3d(boss_orb_pos, (pos_x, pos_y, 60))
-            if dist_p > 0:
-                boss_orb_dir = [(pos_x - boss_orb_pos[0])/dist_p, (pos_y - boss_orb_pos[1])/dist_p, 0]
-                
-        if boss_orb_active:
-            boss_orb_pos[0] += boss_orb_dir[0] * boss_orb_speed
-            boss_orb_pos[1] += boss_orb_dir[1] * boss_orb_speed
-            if abs(boss_orb_pos[0]) > 1000 or abs(boss_orb_pos[1]) > 1000:
-                boss_orb_active = False
+            if boss_orb_cooldown > 0:
+                boss_orb_cooldown -= 1
+
+            # [BOSS] Fire Projectile Attack
+            if not boss_orb_active and boss_orb_cooldown <= 0:
+                boss_orb_active = True
+                boss_orb_cooldown = 120 # [BOSS] Wait 120 frames before shooting again
+                boss_orb_pos = [boss['x'], boss['y'], 80] 
+                dist_p = distance_3d(boss_orb_pos, (pos_x, pos_y, 60))
+                if dist_p > 0:
+                    boss_orb_dir = [(pos_x - boss_orb_pos[0])/dist_p, (pos_y - boss_orb_pos[1])/dist_p, 0]
+                    
+            if boss_orb_active:
+                boss_orb_pos[0] += boss_orb_dir[0] * boss_orb_speed
+                boss_orb_pos[1] += boss_orb_dir[1] * boss_orb_speed
+                if abs(boss_orb_pos[0]) > 1000 or abs(boss_orb_pos[1]) > 1000:
+                    boss_orb_active = False
+
+        if boss_shockwave_cooldown > 0:
+            boss_shockwave_cooldown -= 1
+
+        # [BOSS] Shockwave Attack (1% chance per frame if off cooldown)
+        if not boss_shockwave_active and boss_shockwave_cooldown <= 0:
+            if random.randint(1, 100) == 1:
+                boss_shockwave_active = True
+                boss_shockwave_radius = 0.0
+                boss_shockwave_cooldown = 360  
+
+        if boss_shockwave_active:
+            boss_shockwave_radius += boss_shockwave_speed
+            if boss_shockwave_radius > 1200:
+                boss_shockwave_active = False
 
 def check_collisions():
     global orb_active, orb_pos, orb_radius, enemies, is_swinging, pos_x, pos_y, cheat_mode
-    global player_health, max_health, score, game_over, loot_drops
-    global boss_active, boss_health, boss_defeated, boss, boss_orb_active, boss_orb_pos, boss_orb_radius, boss_hit_this_swing
+    global player_health, max_health, score, game_over, loot_drops, player_iframes
+    global boss_active, boss_health, boss_defeated, boss, boss_orb_active, boss_orb_pos, boss_orb_radius, boss_hit_this_swing, boss_is_rising, domain_animating
+    global boss_shockwave_active, boss_shockwave_radius
     
-    if game_over or boss_defeated: return 
+    if game_over or boss_defeated or domain_animating: return 
     
     player_pos = (pos_x, pos_y, 0)
+
+    # [IFRAMES] Countdown the invincibility timer every frame
+    if player_iframes > 0:
+        player_iframes -= 1
     
     if not is_swinging:
         boss_hit_this_swing = False
         
     # --- BOSS COLLISIONS ---
     if boss_active:
-        if orb_active:
-            dist_2d = math.hypot(orb_pos[0] - boss['x'], orb_pos[1] - boss['y'])
-            if dist_2d <= (orb_radius + boss['radius']):
-                boss_health -= 10
-                orb_active = False 
-                
-        if is_swinging and not boss_hit_this_swing:
-            if distance_3d(player_pos, (boss['x'], boss['y'], 0)) < 160: 
-                rad_p = math.radians(pos_angle)
-                forward_x = math.sin(rad_p)
-                forward_y = -math.cos(rad_p)
-                dx = boss['x'] - pos_x
-                dy = boss['y'] - pos_y
-                dist_to_boss = math.hypot(dx, dy)
-                if dist_to_boss > 0:
-                    dot_product = (forward_x * (dx/dist_to_boss)) + (forward_y * (dy/dist_to_boss))
-                    if dot_product > 0.5: 
-                        boss_health -= 5
-                        boss_hit_this_swing = True 
+        if not boss_is_rising:
+            if orb_active:
+                # [COLLISION] Orb to Boss hit detection
+                dist_2d = math.hypot(orb_pos[0] - boss['x'], orb_pos[1] - boss['y'])
+                if dist_2d <= (orb_radius + boss['radius']):
+                    boss_health -= 10
+                    orb_active = False 
+                    
+            if is_swinging and not boss_hit_this_swing:
+                # [COLLISION] Player sword to Boss hit detection (includes directional dot product check)
+                if distance_3d(player_pos, (boss['x'], boss['y'], 0)) < 160: 
+                    rad_p = math.radians(pos_angle)
+                    forward_x = math.sin(rad_p)
+                    forward_y = -math.cos(rad_p)
+                    dx = boss['x'] - pos_x
+                    dy = boss['y'] - pos_y
+                    dist_to_boss = math.hypot(dx, dy)
+                    if dist_to_boss > 0:
+                        dot_product = (forward_x * (dx/dist_to_boss)) + (forward_y * (dy/dist_to_boss))
+                        if dot_product > 0.5: 
+                            boss_health -= 5
+                            boss_hit_this_swing = True 
         
         if boss_orb_active and not cheat_mode:
+            # [COLLISION] Boss Orb to Player hit detection
             dist_2d = math.hypot(boss_orb_pos[0] - pos_x, boss_orb_pos[1] - pos_y)
-            if dist_2d <= (boss_orb_radius + 20):
+            if dist_2d <= (boss_orb_radius + 20) and player_iframes <= 0:
                 player_health -= 1
+                player_iframes = 60 # [IFRAMES] Apply brief invincibility
                 boss_orb_active = False 
                 if player_health <= 0:
                     player_health = 0
@@ -205,6 +280,18 @@ def check_collisions():
             for _ in range(10):
                 loot_drops.append({'type': 'coin', 'x': boss['x'] + random.uniform(-50,50), 'y': boss['y'] + random.uniform(-50,50), 'z': 10})
 
+    # --- BOSS SHOCKWAVE COLLISION (expanding ring) ---
+    if boss_shockwave_active and not cheat_mode and player_iframes <= 0:
+            # [COLLISION] Checks distance between player and the edge of the expanding ring
+            dist_2d = math.hypot(pos_x - boss['x'], pos_y - boss['y'])
+            if abs(dist_2d - boss_shockwave_radius) <= 20 and pos_z < 30:
+                player_health -= 2
+                player_iframes = 90 # [IFRAMES] Apply brief invincibility
+                boss_shockwave_active = False
+                if player_health <= 0:
+                    player_health = 0
+                    game_over = True
+
     # --- REGULAR ENEMY COLLISIONS ---
     if not boss_active and not boss_defeated:
         alive_enemies = []
@@ -215,15 +302,18 @@ def check_collisions():
             killed = False
             damaged_player = False
             
+            # [COLLISION] Enemy to Player collision check
             if distance_3d(player_pos, e_pos) < (enemy_radius + 15):
-                if not cheat_mode: 
+                if not cheat_mode and player_iframes <= 0: 
                     player_health -= 1
+                    player_iframes = 60 # [IFRAMES] Apply brief invincibility
                     damaged_player = True 
                     if player_health <= 0:
                         player_health = 0
                         game_over = True
                         
             if not damaged_player and not killed and orb_active:
+                # [COLLISION] Orb to Enemy collision check
                 dist_2d = math.hypot(orb_pos[0] - e['x'], orb_pos[1] - e['y'])
                 if dist_2d <= (orb_radius + e['radius'] + 10):
                     hit_occurred = True
@@ -231,6 +321,7 @@ def check_collisions():
                     score += 20
                     
             if not damaged_player and not killed and is_swinging:
+                # [COLLISION] Player sword to Enemy collision check
                 if distance_3d(player_pos, e_pos) < 120: 
                     rad_p = math.radians(pos_angle)
                     forward_x = math.sin(rad_p)
@@ -245,10 +336,11 @@ def check_collisions():
                             score += 10
                     
             if killed:
+                # [LOOT] RNG calculates if dropping Heart or Coin
                 drop_chance = random.random()
-                if drop_chance < 0.2:
+                if drop_chance < 0.2: # [LOOT] 20% chance for Heart
                     loot_drops.append({'type': 'heart', 'x': e['x'], 'y': e['y'], 'z': 10})
-                elif drop_chance < 0.6:
+                elif drop_chance < 0.6: # [LOOT] 40% chance for Coin
                     loot_drops.append({'type': 'coin', 'x': e['x'], 'y': e['y'], 'z': 10})
 
             if not killed and not damaged_player:
@@ -260,6 +352,7 @@ def check_collisions():
     # --- LOOT COLLISIONS ---
     alive_loot = []
     for item in loot_drops:
+        # [LOOT] / [COLLISION] Walking over item collects it
         if distance_3d(player_pos, (item['x'], item['y'], 0)) < 40:
             if item['type'] == 'heart':
                 if player_health < max_health: player_health += 1 
@@ -270,9 +363,13 @@ def check_collisions():
     loot_drops = alive_loot
 
 def auto_guardian():
-    global enemies, pos_angle, pos_x, pos_y, is_swinging, boss_active, boss
+    global enemies, pos_angle, pos_x, pos_y, is_swinging, boss_active, boss, boss_is_rising, domain_animating
     
+    if domain_animating: return 
+
     if boss_active:
+        if boss_is_rising: return 
+
         dx = boss['x'] - pos_x
         dy = boss['y'] - pos_y
         dist = math.hypot(dx, dy)
@@ -288,7 +385,9 @@ def auto_guardian():
         return 
 
     if not enemies: return
+    # [CHEAT] Finds nearest enemy based on shortest distance
     nearest = min(enemies, key=lambda e: distance_3d((pos_x, pos_y, 0), (e['x'], e['y'], e['z'])))
+    # [CHEAT] Calculates direction vector towards target
     dx = nearest['x'] - pos_x
     dy = nearest['y'] - pos_y
     dist = math.hypot(dx, dy)
@@ -296,78 +395,114 @@ def auto_guardian():
     if dist > 0: pos_angle = math.degrees(math.atan2(dy, dx)) + 90
     
     if dist > 60:
+        # [CHEAT] Auto-moves player towards the enemy
         speed = 12
         pos_x += (dx / dist) * speed
         pos_y += (dy / dist) * speed
     else:
+        # [CHEAT] Auto-attacks when in range
         is_swinging = True
 
 # ================= UI & RENDER SYSTEM =================
 def draw_text(x, y, text, font=GLUT_BITMAP_HELVETICA_18):
+    glRasterPos2f(x, y)
+    for ch in text:
+        glutBitmapCharacter(font, ord(ch))
+
+def draw_rect(x, y, width, height, r, g, b, a=1.0):
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glColor4f(r, g, b, a)
+    glBegin(GL_QUADS)
+    glVertex2f(x, y)
+    glVertex2f(x + width, y)
+    glVertex2f(x + width, y + height)
+    glVertex2f(x, y + height)
+    glEnd()
+    glDisable(GL_BLEND)
+
+def draw_ui():
+    global player_health, max_health, score, game_over, boss_active, boss_health, boss_max_health, boss_defeated
+    global last_orb_fire_time, cheat_mode, domain_animating
+
     glMatrixMode(GL_PROJECTION)
     glPushMatrix()
     glLoadIdentity()
     gluOrtho2D(0, 1000, 0, 800)
-    
     glMatrixMode(GL_MODELVIEW)
     glPushMatrix()
     glLoadIdentity()
     
-    glRasterPos2f(x, y)
-    for ch in text:
-        glutBitmapCharacter(font, ord(ch))
+    glPushAttrib(GL_ENABLE_BIT)
+    glDisable(GL_DEPTH_TEST)
+    try:
+        glDisable(GL_LIGHTING)
+    except Exception:
+        pass
+
+    if not domain_animating:
+        bar_x = 20
+        bar_y = 750
+        bar_width = 200
+        bar_height = 20
+        draw_rect(bar_x, bar_y, bar_width, bar_height, 0.2, 0.2, 0.2, 0.8) 
+        health_ratio = max(0, player_health) / max_health
+        draw_rect(bar_x, bar_y, bar_width * health_ratio, bar_height, 0.0, 1.0, 0.0, 0.8) 
         
-    glPopMatrix()
-    glMatrixMode(GL_PROJECTION)
-    glPopMatrix()
-    glMatrixMode(GL_MODELVIEW)
+        glColor3f(1.0, 1.0, 1.0)
+        draw_text(bar_x, bar_y + 25, f"HEALTH: {player_health} / {max_health}", font=GLUT_BITMAP_HELVETICA_18)
 
-def draw_ui():
-    global player_health, max_health, score, game_over, boss_active, boss_health, boss_defeated
-    global last_orb_fire_time, cheat_mode
-    
-    # 1. Health and Score
-    glColor3f(1.0, 1.0, 1.0) 
-    draw_text(20, 760, f"HEALTH: {player_health} / {max_health}")
-    draw_text(20, 730, f"SCORE: {score}")
+        glColor3f(1.0, 1.0, 1.0) 
+        draw_text(20, 710, f"SCORE: {score}")
 
-    # 2. Cooldown Timer
-    current_time = time.time()
-    time_left = max(0.0, 3.0 - (current_time - last_orb_fire_time))
-    if time_left > 0:
-        glColor3f(1.0, 0.5, 0.0) 
-        draw_text(20, 700, f"ORB COOLDOWN: {time_left:.1f}s")
-    else:
-        glColor3f(0.0, 1.0, 0.0) 
-        draw_text(20, 700, "ORB READY")
+        current_time = time.time()
+        time_left = max(0.0, 3.0 - (current_time - last_orb_fire_time))
+        if time_left > 0:
+            glColor3f(1.0, 0.5, 0.0) 
+            draw_text(20, 680, f"ORB COOLDOWN: {time_left:.1f}s")
+        else:
+            glColor3f(0.0, 1.0, 0.0) 
+            draw_text(20, 680, "ORB READY")
 
-    # 3. Cheat Mode Status
-    if cheat_mode:
-        glColor3f(1.0, 0.0, 1.0) 
-        draw_text(20, 670, "CHEAT MODE: ON")
-    else:
-        glColor3f(0.5, 0.5, 0.5) 
-        draw_text(20, 670, "CHEAT MODE: OFF")
+        if cheat_mode:
+            glColor3f(1.0, 0.0, 1.0) 
+            draw_text(20, 650, "CHEAT MODE: ON")
+        else:
+            glColor3f(0.5, 0.5, 0.5) 
+            draw_text(20, 650, "CHEAT MODE: OFF")
+        
+        if boss_active:
+            boss_bar_width = 400
+            boss_bar_x = (1000 - boss_bar_width) / 2
+            boss_bar_y = 740
+            draw_rect(boss_bar_x, boss_bar_y, boss_bar_width, 25, 0.2, 0.0, 0.0, 0.8) 
+            boss_health_ratio = max(0, boss_health) / boss_max_health
+            draw_rect(boss_bar_x, boss_bar_y, boss_bar_width * boss_health_ratio, 25, 1.0, 0.0, 0.0, 0.9) 
+            
+            glColor3f(1.0, 1.0, 1.0) 
+            draw_text(boss_bar_x + 150, boss_bar_y + 30, f"DOMAIN BOSS", font=GLUT_BITMAP_TIMES_ROMAN_24)
     
-    # 4. Boss Health Bar
-    if boss_active:
-        glColor3f(1.0, 0.2, 0.0) 
-        draw_text(400, 760, f"BOSS: {boss_health}%", font=GLUT_BITMAP_TIMES_ROMAN_24)
-    
-    # 5. End Screens
     if game_over:
+        draw_rect(0, 0, 1000, 800, 0.2, 0.0, 0.0, 0.7) 
         glColor3f(1.0, 0.0, 0.0) 
-        draw_text(400, 450, "GAME OVER, YOU DIED", font=GLUT_BITMAP_TIMES_ROMAN_24)
+        draw_text(420, 450, "WASTED!!", font=GLUT_BITMAP_TIMES_ROMAN_24)
         glColor3f(1.0, 1.0, 1.0)
         draw_text(420, 400, f"FINAL SCORE: {score}")
         draw_text(300, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
 
     elif boss_defeated:
+        draw_rect(0, 0, 1000, 800, 0.0, 0.2, 0.0, 0.7) 
         glColor3f(0.0, 1.0, 0.0) 
-        draw_text(250, 450, "CONGRATULATIONS, YOU WON! KEEP UP THE SPIRIT!", font=GLUT_BITMAP_TIMES_ROMAN_24)
+        draw_text(310, 450, "FINAL BOSS DEFEATED, GAME!!", font=GLUT_BITMAP_TIMES_ROMAN_24)
         glColor3f(1.0, 1.0, 1.0) 
-        draw_text(390, 400, f"FINAL SCORE: {score}")
-        draw_text(300, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
+        draw_text(420, 400, f"FINAL SCORE: {score}")
+        draw_text(320, 350, "PRESS 'ESC' TO EXIT OR 'R' TO RESTART")
+    
+    glPopAttrib()
+    glMatrixMode(GL_PROJECTION)
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+    glPopMatrix()
 
 def draw_loot():
     global loot_drops
@@ -523,6 +658,40 @@ def draw_boss_orb():
     glDisable(GL_BLEND)
     glPopMatrix()
 
+def draw_boss_shockwave():
+    global boss, boss_shockwave_radius, boss_shockwave_active
+    if boss_shockwave_active:
+        glPushMatrix()
+        glTranslatef(boss['x'], boss['y'], 10)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+
+        glColor4f(1.0, 0.0, 1.0, 0.8)
+        try:
+            glutWireTorus(15, boss_shockwave_radius, 15, 40)
+        except Exception:
+            segments = 80
+            glBegin(GL_LINE_LOOP)
+            for i in range(segments):
+                a = (i / float(segments)) * (2.0 * math.pi)
+                glVertex3f(math.cos(a) * boss_shockwave_radius, math.sin(a) * boss_shockwave_radius, 0)
+            glEnd()
+
+        glColor4f(0.5, 0.0, 0.5, 0.4)
+        try:
+            glutSolidTorus(10, max(0.0, boss_shockwave_radius - 5), 15, 40)
+        except Exception:
+            segments = 80
+            glBegin(GL_TRIANGLE_FAN)
+            glVertex3f(0, 0, 0)
+            for i in range(segments + 1):
+                a = (i / float(segments)) * (2.0 * math.pi)
+                glVertex3f(math.cos(a) * max(0.0, boss_shockwave_radius - 5), math.sin(a) * max(0.0, boss_shockwave_radius - 5), 0)
+            glEnd()
+
+        glDisable(GL_BLEND)
+        glPopMatrix()
+
 def draw_orb_projectile():
     global orb_pos
     glPushMatrix()
@@ -535,15 +704,23 @@ def draw_orb_projectile():
     glPopMatrix()
 
 def draw_player():
-    global pos_x, pos_y, pos_angle, domain_mode, is_swinging, katana_swing_angle, orb_active, game_over
+    global pos_x, pos_y, pos_angle, domain_mode, is_swinging, katana_swing_angle, orb_active, game_over, player_iframes
     
     glPushMatrix()
-    glTranslatef(pos_x, pos_y, 5)
+    glTranslatef(pos_x, pos_y, 5 + pos_z)
     glRotatef(pos_angle, 0, 0, 1)
 
     if game_over:
-        glRotatef(90, 0, 1, 0)  
-        glTranslatef(-20, 0, -20) 
+        # [DEATH] Visually tip the player over if dead
+        glRotatef(90, 0, 1, 0)  # Rotates 90 degrees to lay flat
+        glTranslatef(-20, 0, -20) # Lowers model into the floor
+
+    # [IFRAMES] Math trick: divides remaining frames by 5 to create an alternating true/false flash
+    is_blinking = player_iframes > 0 and (player_iframes // 5) % 2 == 0
+    if is_blinking:
+        base_color = (1.0, 0.0, 0.0) # Flash red
+    else:
+        base_color = (0.2, 0.2, 0.2)
 
     glColor3f(0.1, 0.1, 0.1)
     for s in [-1, 1]:
@@ -554,7 +731,7 @@ def draw_player():
         glPopMatrix()
 
     glPushMatrix()
-    glColor3f(0.2, 0.2, 0.2)
+    glColor3f(base_color[0], base_color[1], base_color[2]) 
     glTranslatef(0, 0, 50)
     glScalef(0.7, 0.4, 1.2)
     glutSolidCube(40)
@@ -628,24 +805,6 @@ def draw_player():
         glBlendFunc(GL_SRC_ALPHA, GL_ONE)
         glColor4f(0.5, 0, 1.0, 0.2)
         glutSolidSphere(70, 20, 20)
-        glDisable(GL_BLEND)
-
-    if game_over:
-        glEnable(GL_BLEND)
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE) 
-        for _ in range(20): 
-            glPushMatrix()
-            fx = random.uniform(-40, 40)
-            fy = random.uniform(-20, 20)
-            fz = random.uniform(-10, 30) 
-            glTranslatef(fx, fy, fz)
-            r = 1.0
-            g = random.uniform(0.0, 0.6)
-            b = 0.0
-            opacity = random.uniform(0.4, 0.9)
-            glColor4f(r, g, b, opacity)
-            glutSolidSphere(random.uniform(5, 14), 10, 10)
-            glPopMatrix()
         glDisable(GL_BLEND)
 
     glPopMatrix()
@@ -751,49 +910,101 @@ def setupCamera():
     ex, ey, ez, lx, ly, lz = camera_control()
     gluLookAt(ex, ey, ez, lx, ly, lz, 0, 0, 1)
 
+def reset_game():
+    global game_over, boss_defeated, boss_active, boss_health, boss_orb_active, boss_is_rising
+    global boss_shockwave_active, boss_shockwave_radius, boss_shockwave_cooldown
+    global boss_orb_pos, boss_orb_dir, boss_orb_radius, boss_orb_speed
+    global domain_mode, domain_animating, score, max_health, player_health, pos_x, pos_y
+    global orb_active, last_orb_fire_time, enemies, loot_drops, keys
+    global pos_z, is_jumping, jump_timer, player_iframes
+    
+    global cheat_mode
+    cheat_mode = False
+
+    game_over = False
+    boss_defeated = False
+    boss_active = False
+    boss_health = boss_max_health if 'boss_max_health' in globals() else 100
+    boss_orb_active = False
+    boss_is_rising = False
+    domain_mode = False
+    domain_animating = False
+
+    boss_shockwave_active = False
+    boss_shockwave_radius = 0.0
+    boss_shockwave_cooldown = 0
+
+    score = 0
+    max_health = 5
+    player_health = max_health
+    pos_x = 0
+    pos_y = 0
+    orb_active = False
+    last_orb_fire_time = 0.0
+
+    try:
+        boss_orb_pos = [0, 0, 0]
+        boss_orb_dir = [0, 0, 0]
+        boss_orb_radius = 20
+        boss_orb_speed = 15
+    except Exception:
+        pass
+
+    pos_z = 0
+    is_jumping = False
+    jump_timer = 0
+    player_iframes = 0
+
+    try:
+        enemies.clear()
+    except Exception:
+        enemies = []
+    try:
+        loot_drops.clear()
+    except Exception:
+        loot_drops = []
+
+    for k in keys:
+        keys[k] = False
+
 # ================= INPUT =================
 def keyboardListener(key, x, y):
     global keys, domain_mode, orb_active, orb_pos, orb_dir, pos_x, pos_y, cheat_mode
     global game_over, player_health, max_health, score, enemies, loot_drops, camera_distance
-    global boss_active, boss_defeated, boss_health, boss_orb_active, last_orb_fire_time
+    global boss_active, boss_defeated, boss_health, boss_orb_active, last_orb_fire_time, boss_is_rising, domain_animating
+    global is_jumping, jump_timer, JUMP_FRAMES, pos_z
 
     if key == b'\x1b': 
         os._exit(0) 
+    if key == b'r' or key == b'R':
+        reset_game()
+        return
 
     if game_over or boss_defeated:
-        if key == b'r' or key == b'R':
-            game_over = False
-            boss_defeated = False 
-            boss_active = False
-            boss_health = 100
-            boss_orb_active = False
-            
-            score = 0
-            max_health = 5 
-            player_health = max_health 
-            pos_x = 0
-            pos_y = 0
-            orb_active = False 
-            last_orb_fire_time = 0.0
-            
-            enemies.clear()
-            loot_drops.clear()
-            for k in keys: keys[k] = False 
         return 
 
     if key in keys:
         keys[key] = True
 
+    # [JUMP] Trigger jump curve countdown
+    if key == b' ' and not is_jumping and not domain_animating:
+        is_jumping = True
+        jump_timer = JUMP_FRAMES
+
+    # [DOMAIN] Manual toggle
     if key == b'x' or key == b'X': domain_mode = not domain_mode
+    # [CHEAT] Toggle aimbot and invincibility
     if key == b'c' or key == b'C': cheat_mode = not cheat_mode
     
     if key == b'f' or key == b'F':
-        if not cheat_mode:
+        if not cheat_mode and not domain_animating:
             current_time = time.time()
+            # [ORB] Check 3-second cooldown
             if not orb_active and (current_time - last_orb_fire_time) >= 3.0:
                 orb_active = True
                 orb_pos = [pos_x, pos_y, 60]
                 rad_p = math.radians(pos_angle)
+                # [ORB] Calculate forward trajectory based on player rotation
                 orb_dir = [math.sin(rad_p), -math.cos(rad_p), 0] 
                 last_orb_fire_time = current_time
             
@@ -804,7 +1015,9 @@ def keyboardListener(key, x, y):
         camera_distance = camera_distance + zoom_step
 
 def specialKeyListener(key, x, y):
-    global camera_angle, camera_pitch
+    global camera_angle, camera_pitch, domain_animating
+    if domain_animating: return 
+    
     if key == GLUT_KEY_RIGHT: camera_angle -= 3
     elif key == GLUT_KEY_LEFT: camera_angle += 3
     elif key == GLUT_KEY_UP: camera_pitch = max(-10, camera_pitch - 3)
@@ -815,8 +1028,8 @@ def keyboardUpListener(key, x, y):
     if key in keys: keys[key] = False
 
 def mouseListener(button, state, x, y):
-    global is_swinging, person_one, game_over, boss_defeated, cheat_mode
-    if game_over or boss_defeated: return 
+    global is_swinging, person_one, game_over, boss_defeated, cheat_mode, domain_animating
+    if game_over or boss_defeated or domain_animating: return 
     
     if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN:
         if not cheat_mode: 
@@ -829,8 +1042,23 @@ def update_logic():
     global pos_x, pos_y, pos_angle, is_swinging, katana_swing_angle
     global orb_active, orb_pos, orb_dir, player_x, player_y, player_z
     global camera_angle, cheat_mode, game_over, boss_defeated, boss_active
+    global domain_animating, domain_anim_angle, domain_mode, boss_is_rising
 
     if game_over or boss_defeated: return 
+
+    if domain_animating:
+        # [DOMAIN] Cinematic setup - spins camera and locks logic
+        camera_angle += 3.0       
+        domain_anim_angle += 3.0  
+        
+        if domain_anim_angle >= 180 and not domain_mode:
+            domain_mode = True
+            
+        if domain_anim_angle >= 360:
+            domain_animating = False 
+            boss_is_rising = True    
+            
+        return 
 
     if not boss_active and random.randint(1, 60) == 1: 
         spawn_enemy()
@@ -839,7 +1067,7 @@ def update_logic():
     check_collisions()
     
     if cheat_mode:
-        auto_guardian()
+        auto_guardian() # [CHEAT] Takes over movement and attacking
     else:
         speed = 10
         az = math.radians(camera_angle)
@@ -885,10 +1113,25 @@ def update_logic():
         if abs(orb_pos[0]) > GRID_LENGTH or abs(orb_pos[1]) > GRID_LENGTH or abs(orb_pos[2]) > GRID_LENGTH:
             orb_active = False
 
+    global pos_z, is_jumping, jump_timer, JUMP_FRAMES, MAX_JUMP_HEIGHT
+    # [JUMP] Execute jump curve
+    if is_jumping:
+        if jump_timer > 0:
+            jump_timer -= 1
+            # [JUMP] Calculate completion percentage (t goes from 0.0 to 1.0)
+            t = (JUMP_FRAMES - jump_timer) / float(JUMP_FRAMES)
+            # [JUMP] Use Sine wave for smooth arc (0 -> Max Height -> 0)
+            pos_z = math.sin(t * math.pi) * MAX_JUMP_HEIGHT
+        else:
+            is_jumping = False
+            pos_z = 0 # [JUMP] Snap to ground
+    player_z = pos_z
+
 # ================= RENDER =================
 def showScreen():
     update_logic()
 
+    # [DOMAIN] Changes sky/background color
     if domain_mode: glClearColor(0.08, 0.0, 0.0, 1.0)
     else: glClearColor(0.4, 0.3, 0.2, 1.0)
 
@@ -899,8 +1142,24 @@ def showScreen():
     draw_ground()
     draw_scenery()
     
+    if domain_animating:
+        # [DOMAIN] Renders the massive expanding purple dome during the cinematic
+        glPushMatrix()
+        glTranslatef(pos_x, pos_y, 0)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        
+        expansion_radius = domain_anim_angle * 15 
+        
+        glColor4f(0.2, 0.0, 0.4, 0.6)
+        glutSolidSphere(expansion_radius, 40, 40)
+        
+        glDisable(GL_BLEND)
+        glPopMatrix()
+
     if not boss_active: draw_enemies()
     if boss_active: draw_boss()
+    draw_boss_shockwave()
     if boss_orb_active: draw_boss_orb()
         
     draw_loot() 
@@ -916,7 +1175,7 @@ def main():
     glutInit()
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
     glutInitWindowSize(1000, 800)
-    glutCreateWindow(b"Gate Base System")
+    glutCreateWindow(b"Mainkar Chipay")
 
     glEnable(GL_DEPTH_TEST) 
     generate_world_data()
