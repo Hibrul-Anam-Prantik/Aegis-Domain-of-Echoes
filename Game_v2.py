@@ -135,6 +135,7 @@ def update_behavior():
     # --- BOSS SPAWN TRIGGER ---
     # NEW: Trigger the animation state instead of instant rising
     if score >= 500 and not boss_active and not boss_defeated and not domain_animating:
+        print("Domain Expanding! Final Boss Approaching!")
         enemies.clear() 
         domain_animating = True   
         domain_anim_angle = 0     
@@ -253,25 +254,29 @@ def check_collisions():
                     dist_to_boss = math.hypot(dx, dy)
                     if dist_to_boss > 0:
                         dot_product = (forward_x * (dx/dist_to_boss)) + (forward_y * (dy/dist_to_boss))
-                        if dot_product > 0.5: 
+                        if dot_product > 0.5:
                             boss_health -= 5
-                            boss_hit_this_swing = True 
+                            boss_hit_this_swing = True
         
         if boss_orb_active and not cheat_mode:
             dist_2d = math.hypot(boss_orb_pos[0] - pos_x, boss_orb_pos[1] - pos_y)
             if dist_2d <= (boss_orb_radius + 20) and player_iframes <= 0:
                 player_health -= 1
-                player_iframes = 60 
-                boss_orb_active = False 
+                player_iframes = 60
+                boss_orb_active = False
+                print(f"player took damage [1] - Health = {player_health}")
                 if player_health <= 0:
                     player_health = 0
                     game_over = True
+                    print(f"game over, final score = {score}")
                     
         if boss_health <= 0:
             boss_active = False
             boss_defeated = True
             boss_orb_active = False
-            score += 1000 
+            score += 1000
+            print(f"scored [1000]- current Score {score}")
+            print(f"game over, final score = {score}")
             for _ in range(10):
                 loot_drops.append({'type': 'coin', 'x': boss['x'] + random.uniform(-50,50), 'y': boss['y'] + random.uniform(-50,50), 'z': 10})
 
@@ -285,9 +290,11 @@ def check_collisions():
                 player_iframes = 90
                 # Optionally end the shockwave on hit to avoid multiple hits
                 boss_shockwave_active = False
+                print(f"player took damage [2] - Health = {player_health}")
                 if player_health <= 0:
                     player_health = 0
                     game_over = True
+                    print(f"game over, final score = {score}")
 
     # --- REGULAR ENEMY COLLISIONS ---
     if not boss_active and not boss_defeated:
@@ -307,6 +314,7 @@ def check_collisions():
                     if player_health <= 0:
                         player_health = 0
                         game_over = True
+                        print(f"game over, final score = {score}")
                         
             if not damaged_player and not killed and orb_active:
                 dist_2d = math.hypot(orb_pos[0] - e['x'], orb_pos[1] - e['y'])
@@ -314,9 +322,10 @@ def check_collisions():
                     hit_occurred = True
                     killed = True
                     score += 20
+                    print(f"scored [20]")
                     
             if not damaged_player and not killed and is_swinging:
-                if distance_3d(player_pos, e_pos) < 120: 
+                if distance_3d(player_pos, e_pos) < 120:
                     rad_p = math.radians(pos_angle)
                     forward_x = math.sin(rad_p)
                     forward_y = -math.cos(rad_p)
@@ -328,6 +337,7 @@ def check_collisions():
                         if dot_product > 0.5:
                             killed = True
                             score += 10
+                            print(f"scored [10]- current Score {score}")
                     
             if killed:
                 drop_chance = random.random()
@@ -350,6 +360,7 @@ def check_collisions():
                 if player_health < max_health: player_health += 1 
             elif item['type'] == 'coin':
                 score += 50
+                print(f"scored [50]- current Score {score}")
         else:
             alive_loot.append(item)
     loot_drops = alive_loot
@@ -470,7 +481,7 @@ def draw_ui():
             draw_rect(boss_bar_x, boss_bar_y, boss_bar_width * boss_health_ratio, 25, 1.0, 0.0, 0.0, 0.9) 
             
             glColor3f(1.0, 1.0, 1.0) 
-            draw_text(boss_bar_x + 150, boss_bar_y + 30, f"DOMAIN BOSS", font=GLUT_BITMAP_TIMES_ROMAN_24)
+            draw_text(boss_bar_x + 150, boss_bar_y + 30, f"FINAL BOSS", font=GLUT_BITMAP_TIMES_ROMAN_24)
     
     if game_over:
         draw_rect(0, 0, 1000, 800, 0.2, 0.0, 0.0, 0.7) 
@@ -978,9 +989,11 @@ def keyboardListener(key, x, y):
     global is_jumping, jump_timer, JUMP_FRAMES, pos_z
 
     if key == b'\x1b': 
+        print("Exiting the game.")
         os._exit(0) 
     # Restart the game at any time with 'R'
     if key == b'r' or key == b'R':
+        print("Restarting the game...")
         reset_game()
         return
 
@@ -996,9 +1009,13 @@ def keyboardListener(key, x, y):
         is_jumping = True
         jump_timer = JUMP_FRAMES
 
-    if key == b'x' or key == b'X': domain_mode = not domain_mode
-    if key == b'c' or key == b'C': cheat_mode = not cheat_mode
-    
+    if key == b'x' or key == b'X': 
+        print(f"Domain Expansion {'enabled' if not domain_mode else 'disabled'}")
+        domain_mode = not domain_mode
+    if key == b'c' or key == b'C': 
+        print(f"Cheat mode {'enabled' if not cheat_mode else 'disabled'}")
+        cheat_mode = not cheat_mode
+
     if key == b'f' or key == b'F':
         if not cheat_mode and not domain_animating: # Cannot fire during cutscene
             current_time = time.time()
@@ -1045,7 +1062,8 @@ def update_logic():
     global camera_angle, cheat_mode, game_over, boss_defeated, boss_active
     global domain_animating, domain_anim_angle, domain_mode, boss_is_rising
 
-    if game_over or boss_defeated: return 
+    if game_over or boss_defeated:
+        return 
 
     # NEW: Cinematic Animation Logic
     if domain_animating:
@@ -1178,7 +1196,7 @@ def main():
     glutInit()
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
     glutInitWindowSize(1000, 800)
-    glutCreateWindow(b"Gate Base System")
+    glutCreateWindow(b"Mainkar Chipay!")
 
     glEnable(GL_DEPTH_TEST) 
     generate_world_data()
@@ -1189,6 +1207,9 @@ def main():
     glutMouseFunc(mouseListener)
     glutIdleFunc(showScreen)
     glutKeyboardUpFunc(keyboardUpListener)
+
+    print("Landing on Mainkar Chipay.")
+    print("========================================")
 
     glutMainLoop() 
 
