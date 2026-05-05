@@ -33,6 +33,11 @@ player_y = pos_y
 player_z = 0
 person_one = False
 domain_mode = False
+pos_z = 0
+is_jumping = False
+jump_timer = 0
+JUMP_FRAMES = 30
+MAX_JUMP_HEIGHT = 80
 
 building_data = []
 tree_data = []
@@ -81,6 +86,12 @@ boss_orb_speed = 15
 boss_orb_cooldown = 0 
 
 # ================= WORLD GENERATION =================
+
+# Boss shockwave
+boss_shockwave_active = False
+boss_shockwave_radius = 0.0
+boss_shockwave_speed = 10.0
+boss_shockwave_cooldown = 0
 def generate_world_data():
     global building_data, tree_data, ash_particles
     building_data, tree_data, ash_particles = [], [], []
@@ -119,6 +130,7 @@ def update_behavior():
     global enemies, pos_x, pos_y, score, max_health, player_health, domain_mode
     global boss_active, boss_defeated, boss, boss_orb_active, boss_orb_pos, boss_orb_dir, boss_orb_cooldown
     global boss_is_rising, domain_animating, domain_anim_angle
+    global boss_shockwave_active, boss_shockwave_radius, boss_shockwave_speed, boss_shockwave_cooldown
     
     # --- BOSS SPAWN TRIGGER ---
     # NEW: Trigger the animation state instead of instant rising
@@ -185,10 +197,30 @@ def update_behavior():
                 if abs(boss_orb_pos[0]) > 1000 or abs(boss_orb_pos[1]) > 1000:
                     boss_orb_active = False
 
+            # Boss Shockwave logic: cooldown, random trigger, and expansion
+            
+            
+        if boss_shockwave_cooldown > 0:
+            boss_shockwave_cooldown -= 1
+
+        if not boss_shockwave_active and boss_shockwave_cooldown <= 0:
+            # Random chance to trigger a shockwave attack
+            if random.randint(1, 100) == 1:
+                boss_shockwave_active = True
+                boss_shockwave_radius = 0.0
+                boss_shockwave_cooldown = 360  # cooldown before next possible shockwave
+
+        if boss_shockwave_active:
+            boss_shockwave_radius += boss_shockwave_speed
+            # Deactivate when it grows beyond a sensible limit
+            if boss_shockwave_radius > 1200:
+                boss_shockwave_active = False
+
 def check_collisions():
     global orb_active, orb_pos, orb_radius, enemies, is_swinging, pos_x, pos_y, cheat_mode
     global player_health, max_health, score, game_over, loot_drops, player_iframes
     global boss_active, boss_health, boss_defeated, boss, boss_orb_active, boss_orb_pos, boss_orb_radius, boss_hit_this_swing, boss_is_rising, domain_animating
+    global boss_shockwave_active, boss_shockwave_radius
     
     if game_over or boss_defeated or domain_animating: return # Freeze collisions during animation
     
@@ -240,6 +272,20 @@ def check_collisions():
             score += 1000 
             for _ in range(10):
                 loot_drops.append({'type': 'coin', 'x': boss['x'] + random.uniform(-50,50), 'y': boss['y'] + random.uniform(-50,50), 'z': 10})
+
+    # --- BOSS SHOCKWAVE COLLISION (expanding ring) ---
+    if boss_shockwave_active and not cheat_mode and player_iframes <= 0:
+            # Distance in 2D between player and boss
+            dist_2d = math.hypot(pos_x - boss['x'], pos_y - boss['y'])
+            # If the player is near the ring and not too high (pos_z < 30) they take damage
+            if abs(dist_2d - boss_shockwave_radius) <= 20 and pos_z < 30:
+                player_health -= 2
+                player_iframes = 90
+                # Optionally end the shockwave on hit to avoid multiple hits
+                boss_shockwave_active = False
+                if player_health <= 0:
+                    player_health = 0
+                    game_over = True
 
     # --- REGULAR ENEMY COLLISIONS ---
     if not boss_active and not boss_defeated:
@@ -600,6 +646,45 @@ def draw_boss_orb():
     glDisable(GL_BLEND)
     glPopMatrix()
 
+def draw_boss_shockwave():
+    global boss, boss_shockwave_radius, boss_shockwave_active
+    # NEW: Render the expanding shockwave
+    if boss_shockwave_active:
+        glPushMatrix()
+        glTranslatef(boss['x'], boss['y'], 10)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE)
+
+        # Bright magenta wireframe outer ring
+        glColor4f(1.0, 0.0, 1.0, 0.8)
+        try:
+            glutWireTorus(15, boss_shockwave_radius, 15, 40)
+        except Exception:
+            # Fallback: draw a wire circle using line loop
+            segments = 80
+            glBegin(GL_LINE_LOOP)
+            for i in range(segments):
+                a = (i / float(segments)) * (2.0 * math.pi)
+                glVertex3f(math.cos(a) * boss_shockwave_radius, math.sin(a) * boss_shockwave_radius, 0)
+            glEnd()
+
+        # Slightly darker filled core ring for depth
+        glColor4f(0.5, 0.0, 0.5, 0.4)
+        try:
+            glutSolidTorus(10, max(0.0, boss_shockwave_radius - 5), 15, 40)
+        except Exception:
+            # Fallback: draw a filled circle using triangle fan
+            segments = 80
+            glBegin(GL_TRIANGLE_FAN)
+            glVertex3f(0, 0, 0)
+            for i in range(segments + 1):
+                a = (i / float(segments)) * (2.0 * math.pi)
+                glVertex3f(math.cos(a) * max(0.0, boss_shockwave_radius - 5), math.sin(a) * max(0.0, boss_shockwave_radius - 5), 0)
+            glEnd()
+
+        glDisable(GL_BLEND)
+        glPopMatrix()
+
 def draw_orb_projectile():
     global orb_pos
     glPushMatrix()
@@ -615,7 +700,8 @@ def draw_player():
     global pos_x, pos_y, pos_angle, domain_mode, is_swinging, katana_swing_angle, orb_active, game_over, player_iframes
     
     glPushMatrix()
-    glTranslatef(pos_x, pos_y, 5)
+    # Include vertical offset from jumping so the player visibly rises
+    glTranslatef(pos_x, pos_y, 5 + pos_z)
     glRotatef(pos_angle, 0, 0, 1)
 
     if game_over:
@@ -821,6 +907,7 @@ def keyboardListener(key, x, y):
     global keys, domain_mode, orb_active, orb_pos, orb_dir, pos_x, pos_y, cheat_mode
     global game_over, player_health, max_health, score, enemies, loot_drops, camera_distance
     global boss_active, boss_defeated, boss_health, boss_orb_active, last_orb_fire_time, boss_is_rising, domain_animating
+    global is_jumping, jump_timer, JUMP_FRAMES, pos_z
 
     if key == b'\x1b': 
         os._exit(0) 
@@ -851,6 +938,11 @@ def keyboardListener(key, x, y):
 
     if key in keys:
         keys[key] = True
+
+    # Jump: spacebar
+    if key == b' ' and not is_jumping and not domain_animating:
+        is_jumping = True
+        jump_timer = JUMP_FRAMES
 
     if key == b'x' or key == b'X': domain_mode = not domain_mode
     if key == b'c' or key == b'C': cheat_mode = not cheat_mode
@@ -972,6 +1064,18 @@ def update_logic():
         if abs(orb_pos[0]) > GRID_LENGTH or abs(orb_pos[1]) > GRID_LENGTH or abs(orb_pos[2]) > GRID_LENGTH:
             orb_active = False
 
+    # Jump math
+    global pos_z, is_jumping, jump_timer, JUMP_FRAMES, MAX_JUMP_HEIGHT
+    if is_jumping:
+        if jump_timer > 0:
+            jump_timer -= 1
+            t = (JUMP_FRAMES - jump_timer) / float(JUMP_FRAMES)
+            pos_z = math.sin(t * math.pi) * MAX_JUMP_HEIGHT
+        else:
+            is_jumping = False
+            pos_z = 0
+    player_z = pos_z
+
 # ================= RENDER =================
 def showScreen():
     update_logic()
@@ -1005,6 +1109,8 @@ def showScreen():
 
     if not boss_active: draw_enemies()
     if boss_active: draw_boss()
+    # Draw the boss shockwave ring (if active)
+    draw_boss_shockwave()
     if boss_orb_active: draw_boss_orb()
         
     draw_loot() 
