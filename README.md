@@ -4,6 +4,17 @@
 
 > A 3D arena-defense game built entirely with Python and PyOpenGL. No game engine. No shortcuts. Just the OpenGL state machine, a lot of math, and pure stubbornness.
 
+## ⬇️ Download & Play
+
+| Platform   | Download                                                                                                                               | Status       |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| 🍎 macOS   | [MainkarChipay_mac.zip](https://github.com/Hibrul-Anam-Prantik/Computer-Graphics-Project/releases/download/v2.0/MainkarChipay_mac.zip) | ✅ Available |
+| 🪟 Windows | Coming soon                                                                                                                            | 🔜           |
+| 🐧 Linux   | Coming soon                                                                                                                            | 🔜           |
+
+> **macOS users:** After unzipping, right-click the app → **Open** → click **Open** on the warning.
+> If it still doesn't open, go to **System Settings → Privacy & Security** → scroll down and click **"Open Anyway"** → then try opening the app again.
+
 ---
 
 ## 🎮 What Is This Game?
