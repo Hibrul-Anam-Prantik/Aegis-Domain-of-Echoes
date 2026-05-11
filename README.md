@@ -91,11 +91,15 @@ We built this from scratch using the fixed-function pipeline. Here's what we act
 
 ## 👥 Team
 
-| Member                                            | Role                                                      |
-| ------------------------------------------------- | --------------------------------------------------------- |
-| [Fuad](https://github.com/mfd-7)                  | The Architect — Environment, Camera, World Generation     |
-| [Roja](https://github.com/lamia-tarek)            | The Animator — Character Model, Katana System, Visual FX  |
-| [Prantik](https://github.com/hibrul-anam-prantik) | The Engineer — Enemy AI, Boss Logic, Collision, Shockwave |
+| Member                                            | Role                                                                                                                                                                                                  |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Fuad](https://github.com/mfd-7)                  | World Builder — base arena skeleton, procedural buildings, trees, and domain environment                                                                                                              |
+| [Roja](https://github.com/lamia-tarek)            | Game Feel — health system, coin pickups, loot drops, enemy models                                                                                                                                     |
+| [Prantik](https://github.com/hibrul-anam-prantik) | Game Designer & Lead Developer — original concept & idea, enemy AI, boss lifecycle, collision engine, shockwave, Domain Expansion cinematic, full codebase debugging & integration, v1 → v2.0 upgrade |
+
+### A note on contributions
+
+The game concept — the arena-defense structure, the Domain Expansion mechanic, the boss design, and the overall vision of _Aegis: Domain of Echoes_ — was **Prantik's original idea**. He also led the technical side: building the enemy AI, boss mechanics, collision engine, shockwave attack, and Domain Expansion cinematic, while debugging and integrating everyone's work into the final v2.0 build. Fuad built the world — the arena layout, broken buildings, trees, and domain environment. Roja implemented the game-feel layer — health, coin pickups, loot drops, and enemy visuals. It was a collaborative effort, with Prantik driving both the creative and technical direction throughout.
 
 ---
 
