@@ -214,7 +214,7 @@ No game engine. No ECS. Just globals, frame counters, and the OpenGL state machi
 
 ---
 
-## What Changed from v1 → v2.0
+## What Changed from v1 → v2.0 (Prantik)
 
 | Feature                 | v1 (`Aegis_DomainOfEchoes.py`)               | v2.0 (`Aegis_DoE_v2.0.py`)                                                |
 | ----------------------- | -------------------------------------------- | ------------------------------------------------------------------------- |
