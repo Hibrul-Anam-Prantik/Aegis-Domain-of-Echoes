@@ -8,7 +8,7 @@
 
 | Platform   | Download                                                                                                                               | Status       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| 🍎 macOS   | [MainkarChipay_mac.zip](https://github.com/Hibrul-Anam-Prantik/Computer-Graphics-Project/releases/download/v2.0/MainkarChipay_mac.zip) | ✅ Available |
+| 🍎 macOS   | [MainkarChipay.app](https://github.com/Hibrul-Anam-Prantik/Computer-Graphics-Project/releases/download/v2.0/MainkarChipay_mac.zip) | ✅ Available |
 | 🪟 Windows | Coming soon                                                                                                                            | 🔜           |
 | 🐧 Linux   | Coming soon                                                                                                                            | 🔜           |
 
