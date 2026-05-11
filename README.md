@@ -1,47 +1,104 @@
 # ⛩️ Aegis: Domain of Echoes
 
-## The Vision
+### _Mainkar Chipay_ — মাইনকার চিপায়
 
-Imagine a 3D Arena-Defense game where the environment isn't just a stage—it’s an active participant in the combat. You are the Gatekeeper, the last line of defense at the center of the universe (0,0,0).
+> A 3D arena-defense game built entirely with Python and PyOpenGL. No game engine. No shortcuts. Just the OpenGL state machine, a lot of math, and pure stubbornness.
 
-The core "Hook" is the Dimensional Breach (Domain Expansion). Unlike standard games where you just move to "Level 2," our game uses real-time matrix transformations to physically collapse the current reality and rebuild a new one around the player.
+---
 
-## ⚔️ Core Gameplay: The Guardian's Arsenal
+## 🎮 What Is This Game?
 
-- **360° Omnidirectional Combat:** Enemies don't just come from the left or right; they swarm from the 3D void. The player must rotate their character in a full sphere to track targets.
+You are the **Gatekeeper** — the last line of defense standing at the origin of the universe `(0, 0, 0)`. Skeleton warriors swarm you from every direction. Kill enough of them, and something far worse wakes up.
 
-- **Hierarchical Melee (The Katana):** Using Matrix Stacks, we’ll build a weapon that is physically parented to the player's hand. When the player swings, we use nested glRotatef calls to create a fluid, anime-style "Slash" arc.
+This is a **third-person 3D arena-defense** game where the player is the tower. Every asset — from the katana blade to the final boss — is mathematically constructed using OpenGL primitives (`gluSphere`, `gluCylinder`, `glutSolidCube`). There are no textures, no imported models. Everything you see is geometry.
 
-- **Ranged Kinetic Orbs:** Launch high-velocity 3D spheres (gluSphere) that use vector math to travel from the center toward the enemy's 3D coordinates.
+---
 
-## 🌀 The Signature Feature: "The Dimensional Shift / Domain Expansion"
+## 🌀 The Signature Idea: Domain Expansion
 
-This is our "Domain Expansion." When a specific score is reached, the player triggers the Shatter Sequence:
+The core innovation of this project isn't just the combat — it's the **Dimensional Shift**.
 
-- **The Animation:** We manipulate the ModelView Matrix globally. The current world (e.g., an Ancient Samurai Dojo) begins to spin (glRotatef) and shrink (glScalef) into a singular point.
+When you reach a score of **500**, you trigger the _Domain Expansion_:
 
-- **The Swap:** In an instant, the geometry is replaced. The textures, colors, and primitive models swap from Organic/Ancient (Cylinders as bamboo, Cubes as stone) to Digital/Cyberpunk (Spheres as drones, Quads as neon grids).
+- The camera performs a full **360° cinematic barrel roll**, locking out player input.
+- The world visually shifts — tree foliage turns blood-red, buildings glow amber, the player's katana turns magenta.
+- The **Final Boss rises from underground**, emerging from `z = -400` to the surface in a slow, dramatic ascent.
+- The boss's health pool is `100`, and it attacks with two distinct mechanics: a **seeking orb** and an **expanding shockwave ring**.
 
-- **The Gameplay Change:** Gravity or enemy speed can shift, forcing the player to adapt to the new "physics" of that dimension.
+This wasn't just an aesthetic choice — it required manipulating the ModelView Matrix globally during a live frame loop, freezing all game logic mid-animation and resuming it cleanly after. That's not trivial in immediate-mode OpenGL.
 
-## 🛠️ Technical "Flex" (Why it's a Grade-A Project)
+---
 
-We are taking the foundations of Assignment 3 and pushing them to their limit:
+## ⚔️ Gameplay Systems We Built
 
-- **Hierarchical 3D Modeling:** Building a character where the head, torso, and sword are independent objects that move in perfect sync using glPushMatrix and glPopMatrix.
+### Regular Combat Phase
 
-- **Complex 3D Collision:** Implementing 3D distance-based hit detection between projectiles and enemy bounding boxes.
+Skeleton enemies (up to 5 at a time) spawn randomly across the arena and pursue you using a vector-based AI. They have **separation behavior** — they push each other apart so they don't stack on top of you all at once. Kill them with your katana (melee) or fire an energy orb (ranged). They drop **hearts** (health pickups) and **coins** (score).
 
-- **Cinematic Camera:** Using gluLookAt to create a "Dynamic Follow-Cam" that shakes when a dimension shifts or zooms in during a melee strike.
+### The Final Boss
 
-- **Procedural Primitives:** Every asset—from the Katana to the final Boss—is mathematically constructed using gluCylinder, gluSphere, and glutSolidCube.
+Once the Domain Expansion cinematic plays out, the boss enters the arena. It:
 
-## 📢 Summary
+- Slowly **walks toward you** when you're far away
+- Fires a **seeking orb** that tracks your position with a cooldown
+- Periodically launches an **expanding shockwave ring** that spreads outward — you have to jump over it or get out of its path
 
-"It’s a 3D tower defense game where the player is the tower. We are utilizing the OpenGL State Machine to handle complex 3D transformations, turning simple lab primitives into a high-octane, multi-dimensional action experience. The novelty lies in the seamless transition between world geometries, proving our mastery over the 3D pipeline."
+The boss is invulnerable while rising. Once it's on the ground, everything is fair game. Beating it gives **+1000 score** and a shower of coin drops.
 
-## Contributors
+### Loot System
 
-- [Fuad](https://github.com/mfd-7)
-- [Roja](https://github.com/lamia-tarek)
-- [Prantik](https://github.com/hibrul-anam-prantik)
+Enemies drop loot on death (random chance):
+
+- 🪙 **Coin** — picked up automatically for +50 score
+- ❤️ **Heart** — restores 1 HP if you're not at max health
+
+The boss drops 10 coins on defeat.
+
+---
+
+## 🛠️ Technical Highlights (The OpenGL Stuff)
+
+We built this from scratch using the fixed-function pipeline. Here's what we actually implemented:
+
+**Hierarchical 3D Modeling** — The player character is assembled from individual `glutSolidCube`, `gluSphere`, and `gluCylinder` calls, nested inside `glPushMatrix` / `glPopMatrix` stacks. The katana is a _child_ of the arm — it inherits the player's rotation and independently animates the swing arc via `glRotatef`.
+
+**3D Vector Math for AI** — Enemy movement uses normalized direction vectors toward the player. The dot product between the player's forward vector and the direction to a target is what determines whether a swing actually _hits_ — if the dot product is `> 0.5`, the target is "in front" of you.
+
+**Distance-Based Collision** — All hit detection uses the 3D Euclidean distance formula. Projectile-vs-enemy, projectile-vs-boss, shockwave-ring-vs-player (using ring delta tolerance `|dist - radius| ≤ 20`).
+
+**Dynamic Follow Camera** — `gluLookAt` is set up each frame to follow the player smoothly. During the Domain Expansion cinematic, the camera angle auto-increments to perform the barrel roll. There's also a first-person mode toggle.
+
+**Invincibility Frames** — On taking damage, the player enters an iframe window (`player_iframes = 60` frames ≈ 1 second). During this time, the player model blinks red. All damage sources are blocked until iframes expire.
+
+**Procedural World Generation** — `generate_world_data()` populates the arena with randomly placed broken buildings and trees using a grid step pattern. 8,000 ash/dust particles are scattered across the ground plane as ambient atmosphere.
+
+**Jump Physics** — The jump arc is computed using a sine easing: `pos_z = sin(t * π) * MAX_JUMP_HEIGHT`, where `t` is the normalized frame progress. The camera look-target includes `player_z` so you can visually see the jump.
+
+---
+
+## 📁 Project Files
+
+| File                      | Description                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| `Aegis_DoE_v2.0.py`       | **Current build** — fully featured with blending, boss shockwave, domain cinematic |
+| `Aegis_DomainOfEchoes.py` | Version 1 — same logic, template-only rendering (no blending/transparency)         |
+| `test2.py`                | Scratch/test file used during development                                          |
+| `README.md`               | This file                                                                          |
+| `features.md`             | Technical feature breakdown                                                        |
+| `instructions.md`         | Controls and setup guide                                                           |
+
+---
+
+## 👥 Team
+
+| Member                                            | Role                                                      |
+| ------------------------------------------------- | --------------------------------------------------------- |
+| [Fuad](https://github.com/mfd-7)                  | The Architect — Environment, Camera, World Generation     |
+| [Roja](https://github.com/lamia-tarek)            | The Animator — Character Model, Katana System, Visual FX  |
+| [Prantik](https://github.com/hibrul-anam-prantik) | The Engineer — Enemy AI, Boss Logic, Collision, Shockwave |
+
+---
+
+## 📜 License
+
+MIT License — see `LICENSE` for details.
