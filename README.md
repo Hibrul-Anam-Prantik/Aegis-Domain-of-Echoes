@@ -9,7 +9,7 @@
 | Platform   | Download                                                                                                                               | Status       |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
 | 🍎 macOS   | [MainkarChipay.app](https://github.com/Hibrul-Anam-Prantik/Aegis-Domain-of-Echoes/releases/download/v2.0/MainkarChipay_mac.zip) | ✅ Available |
-| 🪟 Windows | Coming soon                                                                                                                            | 🔜           |
+| 🪟 Windows | [AegisDoE.exe](https://github.com/Hibrul-Anam-Prantik/Aegis-Domain-of-Echoes/releases/download/v2.0/AegisDoE.exe)                                                                                                                           | ✅ Available |
 | 🐧 Linux   | Coming soon                                                                                                                            | 🔜           |
 
 > **macOS users:** After unzipping, right-click the app → **Open** → click **Open** on the warning.
